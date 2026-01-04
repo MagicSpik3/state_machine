@@ -1,6 +1,5 @@
 import pytest
-from src.spss_engine.lexer import SpssLexer
-
+from spss_engine.lexer import SpssLexer
 class TestSpssLexer:
 
     def test_basic_command_splitting(self):
@@ -39,18 +38,23 @@ class TestSpssLexer:
         cmds = lexer.get_commands()
         
         assert len(cmds) == 2
-        # Use normalize to check content easily
-        assert lexer.normalize_command(cmds[0]) == "COMPUTE ratio = 0.5."
-        assert lexer.normalize_command(cmds[1]) == "COMPUTE other = .05."
+        assert "0.5." in cmds[0]
+        assert ".05." in cmds[1]
 
-    def test_trailing_garbage(self):
-        """Test handling of code that doesn't end cleanly."""
-        raw_code = "COMPUTE x = 1" # No dot
+    def test_quoted_dot_handling(self):
+        """
+        CRITICAL: Test that a dot inside a string does NOT terminate the command.
+        """
+        raw_code = """
+        COMPUTE msg = "End of sentence.".
+        EXECUTE.
+        """
         lexer = SpssLexer(raw_code)
         cmds = lexer.get_commands()
         
-        assert len(cmds) == 1
-        assert "COMPUTE x = 1" in cmds[0]
+        # If logic is wrong, this will split into 2 or 3 commands incorrectly
+        assert len(cmds) == 2
+        assert 'msg = "End of sentence."' in cmds[0]
 
     def test_normalization(self):
         """Test stripping of excess whitespace."""

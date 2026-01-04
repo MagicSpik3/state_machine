@@ -1,0 +1,19 @@
+[tool.ruff]
+# Same as Black.
+line-length = 100
+indent-width = 4
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and pycodestyle (`E`) codes by default.
+select = ["E", "F"]
+ignore = []
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+# Indent with spaces, rather than tabs.
+indent-style = "space"
+# Respect magic trailing commas.
+skip-magic-trailing-comma = false
+# Automatically detect the appropriate line ending.
+line-ending = "auto"
