@@ -141,17 +141,6 @@ PYTHONPATH=src pytest
 
 ---
 
-> *"The goal is not to preserve the code, but to preserve the intent."*
-
-This is a major victory. We have successfully implemented a fully functioning **Static Single Assignment (SSA) Engine** that can ingest raw, messy SPSS code and produce a mathematically rigorous version history of every variable.
-
-Here is the summary block to add to your `README.md`. It reflects the completion of the "Parser Wall" and the move toward Graph Visualization.
-
-### Update for `README.md`
-
-Add this section under **Current Status** or replace the existing "Next Steps" block.
-
-```markdown
 ## 🚀 Current Status: The "Parser Wall" is Breached
 
 As of **Jan 2026**, the core SSA Engine is operational and fully unit-tested. We have successfully moved beyond simple text processing to semantic state tracking.
