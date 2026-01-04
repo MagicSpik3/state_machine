@@ -40,3 +40,53 @@
 - `IF`, `DO IF` -> `CONDITIONAL`
 - `FREQUENCIES` -> `PASSTHROUGH`
 **Next Step:** Implement `state.py` to handle Variable Versioning (SSA). We need a `SymbolTable` that tracks `x` becoming `x_0`, `x_1`, etc.
+
+
+### [2026-01-04] State Machine & SSA
+**Status:** Complete
+**Decision:** Implemented `StateMachine` class with strict uppercase normalization.
+**Verification:** `tests/unit/test_state.py` passes. Correctly handles:
+- Initial assignment (`Age` -> `AGE_0`)
+- Re-assignment / SSA (`Age` -> `AGE_1`)
+- Case insensitivity (`Age` == `AGE`)
+**Next Step:** Implement `AssignmentExtractor` to parse variable names from `COMPUTE`, `RECODE`, and `STRING` commands.
+
+
+### [2026-01-04] Extractor Implementation
+**Status:** Complete
+**Decision:** Implemented `AssignmentExtractor` using Regex.
+**Verification:** `tests/unit/test_extractor.py` passes. Correctly parses targets from `COMPUTE`, `RECODE`, and `STRING`.
+**Next Step:** **Integration.** Build a `Pipeline` class to orchestrate Lexer -> Parser -> Extractor -> StateMachine and verify end-to-end logic.
+
+
+### [2026-01-04] Integration & Scope Definition
+**Status:** Complete
+**Decision:** Validated end-to-end pipeline with support for Nested Logic (`IF` -> `RECODE`).
+**Verification:** `tests/integration/test_pipeline.py` passes.
+**Next Step:** Create a **Scope Corpus** (`tests/corpus.py`) containing a comprehensive suite of SPSS syntax (DO IF, ELSE, Logical Operators, Comments) to stress-test the Parser and Extractor.
+
+
+### [2026-01-04] Scope Verification & Provenance Upgrade
+**Status:** In Progress
+**Decision:** Validated complex corpus. The naive linear parsing correctly handles nested blocks for SSA versioning.
+**Next Step:** Upgrade `StateMachine` to store **Provenance** (Source Code) for every variable version. This is a prerequisite for Phase 3 (Graphviz generation).
+
+
+### [2026-01-04] Repo Abstraction & Control Logic Stress Test
+**Status:** Planned
+**Decision:** 1. Abstract input handling: The engine should accept a `Repo` path, not just a raw string.
+2. Verify "Flag Variable" handling: Create a test case where a single variable `x` toggles state repeatedly to control flow (`x=2` -> Branch A, `x=3` -> Branch B).
+**Goal:** Prove SSA correctly versions the control variable (`x_0`, `x_1`) so we can distinguish the two different "modes" of operation.
+
+
+### [2026-01-04] Control Flow Abstraction
+**Status:** Complete
+**Decision:** Implemented `process_file` in Pipeline and validated "Flag Variable" logic.
+**Verification:** `tests/integration/test_control_flow.py` passes. The system correctly versions `x` as `X_0`, `X_1`, `X_2` as it toggles between states.
+**Next Step:** **Phase 3 (Visualization).** Implement `GraphGenerator` to convert the `StateMachine` history into DOT (Graphviz) format, visualizing the lifecycle of each variable.
+
+
+### [2026-01-04] Graph Visualization (Rendering)
+**Status:** Planned
+**Decision:** Integrate `graphviz` library to render DOT strings into PNG images.
+**Goal:** Allow users to generate a visual artifact (`output.png`) that maps the logic flow, making the "Time Machine" conceptual model viewable to humans.
