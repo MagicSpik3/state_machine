@@ -6,13 +6,13 @@
 
 ## Decision Journal
 
-### [2024-05-20] Pivot to State Machine Architecture
+### [2026-01-04] Pivot to State Machine Architecture
 **Reason:** The previous "Evolution Engine" (LLM-based translation) was non-deterministic and hard to verify. We moved to a "compiler-style" approach where Python models the logic state mathematically.
 **Action:** - Created `src/spss_engine` as the new core.
 - **DEPRECATED:** The entire `core/` directory (EvolutionEngine, SpecWriter, etc.) and `experiments/` from the previous iteration.
 - **STATUS:** These old files should be archived or deleted to prevent confusion.
 
-### [2024-05-20] Lexer Implementation
+### [2026-01-04] Lexer Implementation
 **Reason:** Need a robust way to handle SPSS "dot termination" logic before parsing.
 **Design:** `SpssLexer` class using splitlines and aggregation. 
 **Constraint:** Must handle dots inside quoted strings correctly (e.g., `COMPUTE x = "End."`).
