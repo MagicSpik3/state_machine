@@ -1,11 +1,3 @@
-# state_machine
-state_machine
-Here is an exhaustive `README.md` for your project. It captures the technical architecture (State Machines, SSA) and the philosophical pivot (Deterministic Control vs. Black Box AI) that we discussed.
-
-You can save this directly as `README.md` in the root of your project.
-
----
-
 # State Machine: Legacy Code Modernization Engine
 
 ## 1. Philosophy & Motivation
