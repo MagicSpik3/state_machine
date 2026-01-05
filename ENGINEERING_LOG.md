@@ -304,3 +304,49 @@ if __name__ == "__main__":
 **Value:** Allows engineers to see "wasted" logic logic at a glance.
 
 
+### [2026-01-05] Phase 5: Spec Generation (LLM Integration)
+**Status:** Planned
+**Goal:** Convert valid State Machine nodes into a human-readable specification.
+**Architecture:**
+1.  **Filter:** specific `get_live_history()` method to exclude dead code.
+2.  **Interface:** `LLMClient` abstract base class to allow swapping (Mock vs. Ollama vs. GPT).
+3.  **Generator:** `SpecGenerator` class to iterate through live nodes and prompt the LLM.
+
+
+### The Real-World Workflow
+
+Your 8 steps map directly to our class structure:
+
+1. **Messy Input:** `Repo` / `Raw Text`
+2. **Black Box:** (The reality we are modeling)
+3. **Assess (Lex/Parse):** `SpssLexer` -> `SpssParser`
+4. **Stateful Description:** `StateMachine` (The SSA Engine)
+5. **Diagram:** `GraphGenerator` (The `.png` output)
+6. **Prune:** `state.find_dead_versions()`
+7. **Describe (The Scribe):** `SpecGenerator` + `LLMClient`
+8. **Organize (The Conductor):** *This is our next architecture challenge.*
+
+
+
+### [2026-01-05] Phase 5 Complete: LLM Integration
+**Status:** Complete
+**Decision:** Integrated `OllamaClient` with `mistral:instruct`.
+**Verification:** `demo_ollama.py` successfully generated a correct English description of the Payroll logic (`Base -> Bonus -> Total`).
+**Performance:** ~1s per node on GTX 1660 after warm-up.
+
+### [2026-01-05] Phase 6: The Conductor (Clustering)
+**Status:** Planned
+**Problem:** The output is a flat list of unrelated variables.
+**Goal:** Group variables into logical "Chapters" (e.g., "Demographics", "Calculations") based on their graph connectivity.
+**Strategy:**
+1.  **Graph Topology:** Use "Weakly Connected Components" to find islands of logic.
+2.  **Topological Sort:** Order variables within a chapter so dependencies are explained *before* dependents (explain `Gross` before `Net`).
+3.  **LLM Summarization:** Ask the LLM to title each Chapter based on its contents.
+
+
+### [2026-01-05] Phase 6 Complete: The Conductor
+**Status:** Complete
+**Feature:** Implemented `Conductor` class to identify logic clusters (Islands) using BFS.
+**Integration:** Wired into `SpecGenerator` to create "Chapters" in the output Markdown.
+**AI:** Connected `OllamaClient` to generate titles for each chapter based on the variable names.
+**Verification:** Validated on `payroll.spss` (Split Payroll vs. Demographics).
