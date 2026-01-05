@@ -90,3 +90,217 @@
 **Status:** Planned
 **Decision:** Integrate `graphviz` library to render DOT strings into PNG images.
 **Goal:** Allow users to generate a visual artifact (`output.png`) that maps the logic flow, making the "Time Machine" conceptual model viewable to humans.
+
+
+### [2026-01-05] Data Dependency Tracking
+**Status:** Planned
+**Goal:** Connect isolated variable histories into a true Data Flow Graph.
+**Problem:** Currently, `COMPUTE y = x + 1` records a new version of `y`, but loses the fact that it depends on `x`.
+**Solution:**
+1.  **Upgrade Extractor:** Add `extract_dependencies(expression)` to scan the Right-Hand Side (RHS) for variable names.
+2.  **Upgrade State:** Store `depends_on` list in the `VariableVersion` tuple.
+3.  **Upgrade Graph:** Render these dependencies as dashed edges (`x_0` -> `y_1`) in Graphviz.
+
+
+### [2026-01-05] Dead Code Elimination (Phase 4)
+**Status:** Planned
+**Goal:** Identify redundant logic using the Dependency Graph.
+**Definition:** A variable version is DEAD if it is not in the `dependencies` list of any other node AND it is not the current (active) version.
+**Strategy:** Implement `find_unused_versions()` in `StateMachine` to scan the ledger for orphaned nodes.
+
+
+This is fantastic news. I see `tests/integration/test_dead_code.py ...` in your output, which means you **already** applied the Dead Code logic I drafted earlier, and it is working perfectly!
+
+Your engine now has three major superpowers:
+
+1. **Time Travel** (SSA Versioning).
+2. **X-Ray Vision** (Data Dependency Tracking).
+3. **Garbage Collection** (Dead Code Identification).
+
+### The Next Move: Visualizing the Zombies
+
+Since we can *mathematically* identify dead code, we should *visually* flag it. A graph where "Dead" nodes are painted **Red** is an incredibly powerful tool for refactoring legacy code.
+
+Here is the plan to implement **Phase 4.5: Dead Code Visualization**.
+
+### Step 1: Update `ENGINEERING_LOG.md`
+
+**File:** `ENGINEERING_LOG.md`
+(Append this entry)
+
+```markdown
+### [2026-01-05] Dead Code Visualization
+**Status:** Planned
+**Goal:** Visually highlight unused logic in the output graph.
+**Strategy:**
+1.  Update `GraphGenerator.generate_dot` to accept a list of `dead_ids`.
+2.  If a node ID is in that list, style it with `style=filled, fillcolor="#ffcccc"` (Light Red).
+**Value:** Allows engineers to see "wasted" logic logic at a glance.
+
+```
+
+---
+
+### Step 2: TDD - The "Red Node" Test
+
+We will update `tests/unit/test_graph.py` to verify that we can style specific nodes.
+
+**File:** `tests/unit/test_graph.py`
+(Add this new test method to `TestGraphGenerator`)
+
+```python
+    def test_dead_code_highlighting(self):
+        """
+        Test that dead nodes are rendered with a specific color (Red).
+        """
+        state = StateMachine()
+        state.register_assignment("x", "x=1") # X_0 (Dead)
+        state.register_assignment("x", "x=2") # X_1 (Live)
+        
+        # We manually tell the generator that X_0 is dead
+        dead_ids = ["X_0"]
+        
+        dot = GraphGenerator.generate_dot(state, highlight_dead=dead_ids)
+        
+        # X_0 should be red
+        assert 'X_0 [label="X_0\\nx=1" style=filled fillcolor="#ffcccc"];' in dot
+        
+        # X_1 should be standard (no fillcolor)
+        assert 'X_1 [label="X_1\\nx=2"];' in dot
+
+```
+
+---
+
+### Step 3: Upgrade `GraphGenerator`
+
+We need to update the signature of `generate_dot` and `render` to accept the dead list.
+
+**File:** `src/spss_engine/graph.py`
+
+```python
+try:
+    import graphviz
+except ImportError:
+    graphviz = None
+from typing import List, Optional
+from spss_engine.state import StateMachine
+
+class GraphGenerator:
+
+    @staticmethod
+    def generate_dot(state_machine: StateMachine, highlight_dead: List[str] = None) -> str:
+        if highlight_dead is None:
+            highlight_dead = []
+            
+        lines = ["digraph StateMachine {", "    rankdir=LR;", "    node [shape=box fontname=\"Courier\"];"]
+        
+        for var_name, history in state_machine.history_ledger.items():
+            previous_node_id = None
+            
+            for version in history:
+                node_id = version.id
+                clean_source = version.source.replace('"', "'")
+                
+                # Determine Style
+                style_attr = ""
+                if node_id in highlight_dead:
+                    # Paint it Red
+                    style_attr = ' style=filled fillcolor="#ffcccc"'
+                
+                label = f"{node_id}\\n{clean_source}"
+                lines.append(f'    {node_id} [label="{label}"{style_attr}];')
+                
+                # 1. Sequence Edge
+                if previous_node_id:
+                    lines.append(f'    {previous_node_id} -> {node_id} [weight=2];')
+                
+                # 2. Dependency Edges
+                for dep_id in version.dependencies:
+                    lines.append(f'    {dep_id} -> {node_id} [style=dashed constraint=false color=blue];')
+
+                previous_node_id = node_id
+                
+        lines.append("}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def render(state_machine: StateMachine, filename: str = "output", format: str = "png", highlight_dead: List[str] = None) -> str:
+        if graphviz is None:
+            raise ImportError("The 'graphviz' library is required. pip install graphviz")
+
+        dot_source = GraphGenerator.generate_dot(state_machine, highlight_dead=highlight_dead)
+        src = graphviz.Source(dot_source)
+        output_path = src.render(filename=filename, format=format, cleanup=True)
+        return output_path
+
+```
+
+---
+
+### Step 4: Create a "Zombie Demo"
+
+Let's prove this works by creating a script that generates a graph with obvious red boxes.
+
+**File:** `demo_zombies.py`
+
+```python
+from spss_engine.pipeline import CompilerPipeline
+from spss_engine.graph import GraphGenerator
+
+def main():
+    # Scenario: 'temp' is calculated but never used. 'x' is overwritten.
+    code = """
+    * 1. Create a variable that is never used (Zombie).
+    COMPUTE temp = 999.
+    
+    * 2. Initialize X.
+    COMPUTE x = 10.
+    
+    * 3. Overwrite X without reading X_0 (Zombie).
+    COMPUTE x = 20.
+    
+    * 4. Use X (Keeps X_1 alive).
+    COMPUTE y = x + 5.
+    """
+    
+    print("🚀 Hunting Zombies...")
+    pipeline = CompilerPipeline()
+    pipeline.process(code)
+    
+    # Analyze
+    dead_vars = pipeline.analyze_dead_code()
+    print(f"💀 Dead Code Detected: {dead_vars}")
+    
+    # Render
+    filename = "zombie_attack"
+    print(f"🎨 Painting {filename}.png...")
+    
+    path = GraphGenerator.render(
+        pipeline.state_machine, 
+        filename=filename, 
+        highlight_dead=dead_vars
+    )
+    print(f"✅ Saved to {path}")
+
+if __name__ == "__main__":
+    main()
+
+```
+
+### Next Steps
+
+1. **Run tests:** `PYTHONPATH=src:. pytest tests/unit/test_graph.py`
+2. **Run demo:** `PYTHONPATH=src python demo_zombies.py`
+3. **Open `zombie_attack.png**`: You should see `TEMP_0` and `X_0` highlighted in **RED**.
+
+
+### [2026-01-05] Dead Code Visualization
+**Status:** Planned
+**Goal:** Visually highlight unused logic in the output graph.
+**Strategy:**
+1.  Update `GraphGenerator.generate_dot` to accept a list of `dead_ids`.
+2.  If a node ID is in that list, style it with `style=filled, fillcolor="#ffcccc"` (Light Red).
+**Value:** Allows engineers to see "wasted" logic logic at a glance.
+
+

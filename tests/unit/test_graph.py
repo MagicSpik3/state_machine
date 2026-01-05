@@ -2,6 +2,7 @@ import pytest
 from spss_engine.state import StateMachine
 from spss_engine.graph import GraphGenerator
 
+
 class TestGraphGenerator:
 
     def test_single_variable_lifecycle(self):
@@ -19,12 +20,12 @@ class TestGraphGenerator:
 
         # 3. Assertions
         # Check Nodes exist
-        assert 'AGE_0' in dot_output
-        assert 'AGE_1' in dot_output
-        
+        assert "AGE_0" in dot_output
+        assert "AGE_1" in dot_output
+
         # Check Edges exist (Sequence)
-        assert 'AGE_0 -> AGE_1' in dot_output
-        
+        assert "AGE_0 -> AGE_1" in dot_output
+
         # --- FIX IS HERE ---
         # The label includes the Node ID and a newline (\n)
         assert 'label="AGE_0\\nCOMPUTE Age = 0."' in dot_output
@@ -37,10 +38,29 @@ class TestGraphGenerator:
         state = StateMachine()
         state.register_assignment("x", "x=1")
         state.register_assignment("y", "y=2")
-        
+
         dot = GraphGenerator.generate_dot(state)
-        
-        assert 'X_0' in dot
-        assert 'Y_0' in dot
+
+        assert "X_0" in dot
+        assert "Y_0" in dot
         # There should be NO edge between X and Y
-        assert 'X_0 -> Y_0' not in dot
+        assert "X_0 -> Y_0" not in dot
+
+    def test_dead_code_highlighting(self):
+        """
+        Test that dead nodes are rendered with a specific color (Red).
+        """
+        state = StateMachine()
+        state.register_assignment("x", "x=1")  # X_0 (Dead)
+        state.register_assignment("x", "x=2")  # X_1 (Live)
+
+        # We manually tell the generator that X_0 is dead
+        dead_ids = ["X_0"]
+
+        dot = GraphGenerator.generate_dot(state, highlight_dead=dead_ids)
+
+        # X_0 should be red
+        assert 'X_0 [label="X_0\\nx=1" style=filled fillcolor="#ffcccc"];' in dot
+
+        # X_1 should be standard (no fillcolor)
+        assert 'X_1 [label="X_1\\nx=2"];' in dot

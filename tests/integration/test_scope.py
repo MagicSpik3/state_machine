@@ -2,11 +2,12 @@ import pytest
 from spss_engine.pipeline import CompilerPipeline
 from tests.corpus import COMPREHENSIVE_SCOPE_CORPUS
 
+
 class TestScopeCorpus:
 
     def test_comprehensive_corpus_parsing(self):
         """
-        Runs the full corpus through the pipeline and verifies that 
+        Runs the full corpus through the pipeline and verifies that
         variable versions (SSA) increment correctly despite complex syntax.
         """
         pipeline = CompilerPipeline()
@@ -15,7 +16,7 @@ class TestScopeCorpus:
         # 1. Check Simple Initialization
         # Age was init(0) -> assigned(25) -> assigned(in DO IF)
         # We expect at least version 2 (AGE_2) or higher depending on flow.
-        # Let's count: 
+        # Let's count:
         #   1. COMPUTE Age = 0.         (AGE_0)
         #   2. COMPUTE Age = 25.        (AGE_1)
         #   3. No other updates to Age (Age_Group is different).
@@ -35,7 +36,7 @@ class TestScopeCorpus:
 
         # 5. Check DO IF Block Logic
         # Age_Group set in IF (0) -> ELSE IF (1) -> ELSE (2)
-        # Since it's the same variable being updated in different branches, 
+        # Since it's the same variable being updated in different branches,
         # SSA logic treats them as sequential updates in the linear parse order.
         # Counts: DO IF(0), ELSE IF(1), ELSE(2) -> Final should be version 2
         assert pipeline.get_variable_version("Age_Group") == "AGE_GROUP_2"

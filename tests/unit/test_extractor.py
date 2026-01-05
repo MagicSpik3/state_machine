@@ -1,13 +1,14 @@
 import pytest
 from spss_engine.extractor import AssignmentExtractor
 
+
 class TestAssignmentExtractor:
-    
+
     def test_extract_compute_simple(self):
         """Test standard COMPUTE variable extraction."""
         cmd = "COMPUTE Age = 20."
         target = AssignmentExtractor.extract_target(cmd)
-        assert target == "AGE" # Expect normalization
+        assert target == "AGE"  # Expect normalization
 
     def test_extract_compute_with_whitespace(self):
         """Test extraction with messy whitespace."""
