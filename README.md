@@ -209,3 +209,190 @@ history = pipeline.get_variable_history("Status")
 ```
 
 ```
+This is a perfect stopping point. We have established a complete, verified pipeline from "Raw Code" to "Verified English Spec."
+
+Here are the updated files. I have integrated all our recent wins (Ollama, Conductor, PSPP Verification, Statify CLI) into the documentation so we can resume exactly where we left off.
+
+### 1. `ENGINEERING_LOG.md` (Updated)
+
+I have added the completion logs for Phase 5 and 6, plus the new Verification layer.
+
+```markdown
+# Engineering Log
+
+## Current Architecture
+**Pattern:** State Machine / Decompiler / Semantic Analysis
+**Goal:** Parse SPSS code into a Control Flow Graph (CFG), verify logic with PSPP, and generate human-readable specs using LLM clustering.
+
+## Decision Journal
+
+### [2026-01-04] Pivot to State Machine Architecture
+**Reason:** The previous "Evolution Engine" (LLM-based translation) was non-deterministic.
+**Action:** Created `src/spss_engine` as the new core using SSA (Static Single Assignment).
+
+### [2026-01-04] Core Engine Implementation (Phases 1-3)
+**Status:** Complete
+**Components:**
+1. **Lexer:** Handles "dot termination" and strings (`lexer.py`).
+2. **Parser/Extractor:** Classifies commands (`ASSIGNMENT`, `CONDITIONAL`) and isolates variables.
+3. **State Machine:** Implements SSA versioning (`x` -> `x_0`, `x_1`) and provenence tracking.
+**Verification:** All unit/integration tests passing.
+
+### [2026-01-04] Visualization & Dead Code (Phase 4)
+**Status:** Complete
+**Feature:** Graphviz generation (`graph.py`) with Dead Code highlighting.
+**Outcome:** We can mathematically identify and visually flag logic that is never used ("Zombies").
+
+### [2026-01-05] Phase 5: LLM Integration (The Scribe)
+**Status:** Complete
+**Decision:** Integrated `OllamaClient` to connect to local models (`mistral:instruct` / `llama3`).
+**Architecture:** `SpecGenerator` iterates through **Live** nodes (ignoring Dead Code) and prompts the LLM for one-sentence descriptions.
+**Verification:** `demo_ollama.py` proved we can translate `Net = Gross - Tax` into English prose.
+
+### [2026-01-05] Phase 6: The Conductor (Clustering)
+**Status:** Complete
+**Problem:** Output was a flat, unreadable list of 100+ variables.
+**Solution:** Implemented `Conductor` class (`conductor.py`) using **Weakly Connected Components (BFS)** to identify "islands" of logic.
+**Feature:**
+1. **Clustering:** Groups related variables (e.g., "Demographics" vs "Payroll").
+2. **Topological Sort:** Ensures dependencies (`Gross`) are explained before dependents (`Net`).
+3. **Auto-Titling:** LLM generates a Chapter Title based on the variables in the cluster.
+**Verification:** `statify.py` successfully split `payroll.spss` into two distinct chapters.
+
+### [2026-01-05] Ground Truth Verification (The Probe)
+**Status:** Complete
+**Goal:** Prove the engine's "understanding" matches reality.
+**Implementation:** `PsppRunner` class (`runner.py`) injects a `SAVE TRANSLATE` command into scripts to dump the final state to CSV.
+**Outcome:** We can now run any legacy script via `pspp` and assert that `Net_Pay` actually equals `40,000`, creating a feedback loop between our Graph and the runtime reality.
+**Constraint:** Must use `/FIELDNAMES` in PSPP to ensure CSV headers are generated.
+
+### [Next Session] Phase 7: Scaling & Repository Management
+**Status:** Planned
+**Goal:** Move from single-file analysis (`statify.py`) to whole-repo analysis.
+**Plan:**
+1.  Integrate the `Repository` class (`repository.py`) to manage file loading.
+2.  Implement "Cross-File Dependencies" (e.g., `INSERT FILE` or `MATCH FILES`).
+3.  Add "Verified" Badges to the generated spec if `PsppRunner` confirms the logic.
+
+```
+
+---
+
+### 2. `README.md` (Updated)
+
+I have updated the status, added the new CLI tool, and refreshed the architecture table.
+
+```markdown
+# State Machine: Legacy Code Modernization Engine
+
+## 1. Philosophy
+
+**"We are not building a translator; we are building a de-compiler for logic."**
+
+This project rejects the "Black Box" approach of simply asking an LLM to rewrite code. Instead, we use a deterministic Python engine to:
+1.  **Model** the code as a Control Flow Graph (CFG).
+2.  **Verify** the logic using SSA (Static Single Assignment) and PSPP runtime probes.
+3.  **Explain** the logic using an LLM as a "Decorator," not an Architect.
+
+This ensures strict auditability: every sentence in the final English specification is backed by a specific, traceable node in the Logic Graph.
+
+---
+
+## 2. Capabilities
+
+As of **Jan 2026**, the system is fully operational as a **Semantic De-compiler**.
+
+### Core Features
+* **Time Travel (SSA):** Distinguishes between `x` at line 10 (`x_0`) and `x` at line 50 (`x_1`).
+* **Zombie Detection:** Mathematically identifies "Dead Code" (logic that is calculated but never used) and visualizes it in Red.
+* **The Conductor:** Automatically clusters variables into logical "Chapters" (e.g., separating "Payroll Logic" from "Demographics Logic") using Graph Topology.
+* **Ground Truth Verification:** Runs the legacy code using `pspp` to confirm that the Engine's calculations match reality.
+
+---
+
+## 3. Architecture
+
+| Phase | Component | Status | Responsibility |
+| :--- | :--- | :--- | :--- |
+| **1** | `Lexer` | ✅ Done | Normalizes raw text and handles "dot termination". |
+| **2** | `Parser` | ✅ Done | Classifies commands (`ASSIGNMENT`, `CONDITIONAL`). |
+| **3** | `State Machine` | ✅ Done | SSA Engine. Tracks provenance and data dependencies. |
+| **4** | `GraphGenerator` | ✅ Done | Renders `.png` diagrams. Highlights Dead Code. |
+| **5** | `SpecGenerator` | ✅ Done | Connects to Local LLM (Ollama) to describe logic. |
+| **6** | `Conductor` | ✅ Done | Clusters logic into topological "Chapters". |
+| **V** | `PsppRunner` | ✅ Done | Verifies logic against the actual PSPP runtime. |
+
+---
+
+## 4. Usage: "Statify"
+
+The primary entry point is the `statify` CLI tool. It transforms a legacy file (or folder) into a verified documentation package.
+
+### Command
+```bash
+# Analyze a single file
+PYTHONPATH=src python statify.py legacy/payroll.spss --model mistral:instruct
+
+# Analyze an entire folder
+PYTHONPATH=src python statify.py legacy_project_v1/
+
+```
+
+### Output Artifacts
+
+For every input file (e.g., `payroll.spss`), the system generates:
+
+1. **`payroll_flow.png`**: A visual map of the logic. "Dead" variables are painted Red.
+2. **`payroll_spec.md`**: A structured Business Specification, organized into Chapters, with titles generated by the AI.
+
+---
+
+## 5. Development Setup
+
+### Prerequisites
+
+* Python 3.12+
+* `pspp` (for Ground Truth verification)
+* `ollama` (running locally for AI description)
+
+### Installation
+
+```bash
+git clone <repo_url>
+cd state_machine
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+```
+
+### Running Tests
+
+We use `pytest` for all verification.
+
+```bash
+# Run Unit, Integration, and Verification tests
+PYTHONPATH=src:. pytest
+
+```
+
+---
+
+## 6. Next Steps (Phase 7)
+
+We are currently moving from **Single File Analysis** to **Repository Analysis**.
+
+* [ ] **Repository Class:** Manage state across multiple files.
+* [ ] **Cross-File Dependencies:** Handle `INSERT FILE` and `MATCH FILES`.
+* [ ] **Verified Badging:** Automatically mark specs as "Verified" if `PsppRunner` confirms the output values.
+
+```
+
+### How to Resume
+When we pick this up again, simply:
+1.  **Verify Environment:** `source venv/bin/activate`
+2.  **Verify Ollama:** `ollama serve`
+3.  **Run Tests:** `PYTHONPATH=src:. pytest`
+4.  **Start Phase 7:** We will begin implementing `src/spss_engine/repository.py` to handle the batch processing logic we started discussing.
+
+```
