@@ -1,95 +1,140 @@
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
 
-
-class VariableVersion(NamedTuple):
-    id: str  # e.g. "AGE_0"
-    version_idx: int  # e.g. 0
-    source: str  # e.g. "COMPUTE Age = 25."
-    dependencies: List[str] = []
-
+@dataclass
+class VariableVersion:
+    id: str               # e.g., "AGE_0"
+    source: str           # e.g., "COMPUTE Age = 25."
+    dependencies: List[str] = field(default_factory=list) # e.g., ["DOB_0"]
 
 class StateMachine:
     """
-    Manages the Symbol Table and SSA (Static Single Assignment) versioning.
+    Tracks the lifecycle of variables (SSA) and manages the Symbol Table.
     """
-
     def __init__(self):
-        self.version_counters: Dict[str, int] = {}
-        self.history_ledger: Dict[str, List[VariableVersion]] = {}
+        self.symbol_table: Dict[str, int] = {}  # Map: "AGE" -> 0 (Current Index)
+        self.history_ledger: Dict[str, List[VariableVersion]] = {} # Map: "AGE" -> [AGE_0, AGE_1]
+        
+        # BRIDGE LOGIC: Tracks file snapshots
+        self.file_registry: Dict[str, List[str]] = {} # Map: "file.sav" -> ["AGE_0", "STATUS_1"]
 
     def _normalize(self, var_name: str) -> str:
         return var_name.strip().upper()
 
-    def register_assignment(
-        self, var_name: str, source_code: str = "", dependencies: List[str] = None
-    ) -> str:
+    def get_current_version(self, var_name: str) -> str:
+        """Returns the ID of the current active version (e.g., 'AGE_1')."""
+        norm_name = self._normalize(var_name)
+        if norm_name not in self.symbol_table:
+            raise ValueError(f"Variable {var_name} is not defined.")
+        idx = self.symbol_table[norm_name]
+        return f"{norm_name}_{idx}"
+
+    def get_history(self, var_name: str) -> List[VariableVersion]:
+        norm_name = self._normalize(var_name)
+        return self.history_ledger.get(norm_name, [])
+
+    def register_assignment(self, target: str, source_code: str, dependencies: List[str] = None):
         """
-        Records a write to a variable.
+        Creates a new SSA version for the target variable.
         """
         if dependencies is None:
             dependencies = []
-
-        key = self._normalize(var_name)
-
-        if key not in self.version_counters:
-            self.version_counters[key] = 0
-            self.history_ledger[key] = []
+            
+        norm_target = self._normalize(target)
+        
+        # Increment version index (SSA)
+        if norm_target not in self.symbol_table:
+            self.symbol_table[norm_target] = 0
         else:
-            self.version_counters[key] += 1
+            self.symbol_table[norm_target] += 1
+            
+        idx = self.symbol_table[norm_target]
+        version_id = f"{norm_target}_{idx}"
+        
+        # Record history
+        new_version = VariableVersion(id=version_id, source=source_code, dependencies=dependencies)
+        
+        if norm_target not in self.history_ledger:
+            self.history_ledger[norm_target] = []
+        self.history_ledger[norm_target].append(new_version)
 
-        current_idx = self.version_counters[key]
-        version_id = f"{key}_{current_idx}"
+    # --- CONTROL FLOW HANDLERS ---
+    # Currently we treat these as markers, but eventually they will handle Phi functions.
+    
+    def register_conditional(self, source_code: str):
+        """
+        Registers a branching event (IF / DO IF).
+        For now, this is a placeholder to prevent the Pipeline from crashing.
+        In Phase 8, this will trigger a Stack Push.
+        """
+        pass 
 
-        # Record Provenance AND Dependencies
-        record = VariableVersion(
-            id=version_id,
-            version_idx=current_idx,
-            source=source_code,
-            dependencies=dependencies,
-        )
-        self.history_ledger[key].append(record)
+    def register_control_flow(self, source_code: str):
+        """
+        Registers flow changes (ELSE, END IF, EXECUTE).
+        """
+        pass
 
-        return version_id
+    # --- FILE BRIDGE HANDLERS (New) ---
 
-    def get_current_version(self, var_name: str) -> str:
-        key = self._normalize(var_name)
-        if key not in self.version_counters:
-            raise ValueError(f"Variable '{var_name}' has not been defined yet.")
-        return f"{key}_{self.version_counters[key]}"
+    def register_file_save(self, filename: str, source_code: str):
+        """
+        Snapshots the current symbol table into a file registry.
+        """
+        # Store the current version ID of every active variable
+        current_snapshot = []
+        for var, idx in self.symbol_table.items():
+            current_snapshot.append(f"{var}_{idx}")
+        
+        self.file_registry[filename] = current_snapshot
 
-    def get_history(self, var_name: str) -> List[VariableVersion]:
-        key = self._normalize(var_name)
-        return self.history_ledger.get(key, [])
+    def register_file_match(self, filename: str, source_code: str):
+        """
+        Simulates loading a file by linking current variables to the snapshot versions.
+        """
+        if filename in self.file_registry:
+            snapshot_versions = self.file_registry[filename]
+            
+            for upstream_id in snapshot_versions:
+                # upstream_id looks like "AGE_0"
+                # We want to create a NEW version "AGE_1" that depends on "AGE_0"
+                # This creates the visible bridge in the graph.
+                
+                var_name = upstream_id.rsplit('_', 1)[0]
+                
+                self.register_assignment(
+                    target=var_name,
+                    source_code=f"MATCH FILES from '{filename}'",
+                    dependencies=[upstream_id]
+                )
+
+    # --- ANALYSIS ---
 
     def find_dead_versions(self) -> List[str]:
         """
-        Identifies variable versions that were created but never read by any subsequent logic,
-        and are not the final state of the variable.
+        Identifies versions that are never used as a dependency for any subsequent version.
+        Excludes the 'Current' (final) version of any variable.
         """
-        # 1. Collect all dependencies that ARE used
-        used_versions = set()
-
-        for var_history in self.history_ledger.values():
-            for version in var_history:
-                for dep in version.dependencies:
-                    used_versions.add(dep)
-
-        dead_list = []
-
-        # 2. Check every version to see if it's used or final
-        for var_name, history in self.history_ledger.items():
-            current_active_version = self.get_current_version(var_name)
-
+        used_dependencies = set()
+        
+        # 1. Collect all used dependencies
+        for history in self.history_ledger.values():
             for version in history:
-                # Rule 1: If it's the final version, it's implicitly used (by the resulting dataset)
-                if version.id == current_active_version:
-                    continue
-
-                # Rule 2: If it appears in someone else's dependency list, it's used
-                if version.id in used_versions:
-                    continue
-
-                # Otherwise, it's dead code.
-                dead_list.append(version.id)
-
-        return dead_list
+                for dep in version.dependencies:
+                    used_dependencies.add(dep)
+        
+        dead_versions = []
+        
+        # 2. Check each version
+        for var_name, history in self.history_ledger.items():
+            current_idx = self.symbol_table[var_name]
+            current_id = f"{var_name}_{current_idx}"
+            
+            for version in history:
+                # A version is DEAD if:
+                # 1. It is NOT in the used set
+                # 2. It is NOT the final current state (which is implicitly "used" by the output)
+                if version.id not in used_dependencies and version.id != current_id:
+                    dead_versions.append(version.id)
+                    
+        return dead_versions

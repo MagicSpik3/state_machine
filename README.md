@@ -396,3 +396,44 @@ When we pick this up again, simply:
 4.  **Start Phase 7:** We will begin implementing `src/spss_engine/repository.py` to handle the batch processing logic we started discussing.
 
 ```
+---
+
+## Appendix A: The Architecture of Legacy Logic
+
+### Why SPSS is the Perfect Candidate for Static Analysis
+
+Users often ask why we treat SPSS scripts as rigorous mathematical graphs rather than simply "translating" them to Python. The answer lies in the structural differences between SPSS and modern multi-paradigm languages (Python, R). While SPSS is syntactically dated, its limitations are actually **architectural features** that make deterministic modeling possible.
+
+#### 1. The Advantage of "Value Semantics"
+
+In languages like Python or R, variable assignment often implies reference (pointers). Writing `b = a` creates an alias; modifying `b` might secretly modify `a`. To model this, an engine must track the Heap and the Stack, leading to complex "Alias Analysis."
+
+* **The SPSS Reality:** SPSS uses strict **Value Semantics**. `COMPUTE Y = X` creates a distinct copy. There are no pointers, no objects, and no "Action at a Distance."
+* **Our Advantage:** This means our Dependency Graph is clean. An edge from `X` to `Y` is always a direct causal link, never a shared memory reference.
+
+#### 2. The "Implicit Loop" Architecture
+
+SPSS scripts do not run top-to-bottom like a Python script. Instead, the entire script functions as the **inner body of a loop** that iterates over a dataset.
+
+* **The Model:** We do not need to model the iteration itself. Our State Machine models the **Abstract Transformation Rules** applied to a single generic row.
+* **The Consequence:** This allows us to flatten the logic into a linear sequence of transformations without needing to simulate the state of 1,000,000 rows of data.
+
+#### 3. The "Geological" Nature of Legacy Code
+
+Modern code is refactored; legacy SPSS code is **accreted**.
+
+* **The Pattern:** Logic is rarely deleted. Instead, new logic is appended to the bottom of the file to "fix" or "overwrite" previous calculations. A script might calculate `Net_Pay` on line 50, only to recalculate it on line 500 because of a 2012 policy change.
+* **The Solution:** This "Append-Only" culture creates the specific problem our engine is designed to solve: **Dead Code**. By using Static Single Assignment (SSA), we can mathematically prove that the calculation on line 50 is never read by the final output, allowing us to treat it as a "Zombie" and prune it from the final specification.
+
+#### 4. The Graph Topology (DAG vs. Tree)
+
+While flowcharts are often visualized as Trees (splitting infinitely), business logic is almost always a **Directed Acyclic Graph (DAG)**.
+
+* **Merge Points:** Branches (IF/ELSE) usually split to handle edge cases but strictly merge back together to form a final dataset.
+* **Phi Functions:** Our engine handles these merge points using SSA Phi functions (), ensuring that the system can deterministically track a variable's state even when its history branches.
+
+### Summary
+
+We are not building a translator; we are building a **Digital Archaeology Tool**. We rely on the simplicity and procedural nature of SPSS to brush away layers of dead logic, revealing the clean, deterministic skeleton of the business rules underneath.
+
+---

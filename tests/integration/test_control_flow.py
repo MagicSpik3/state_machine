@@ -56,5 +56,11 @@ class TestControlFlow:
         # Result_A should depend on the state where x was valid.
         # Currently, our extractor is naive (doesn't link dependencies yet),
         # but we CAN verify that Result_A and Result_B were recognized and versioned.
-        assert pipeline.get_variable_version("Result_A") == "RESULT_A_0"
-        assert pipeline.get_variable_version("Result_B") == "RESULT_B_0"
+        assert pipeline.get_variable_version("Result_A").id == "RESULT_A_0"
+        assert pipeline.get_variable_version("Result_B").id == "RESULT_B_0"
+              
+        # Check dependency logic (x=2 implies dependency on X)
+        result_ver = pipeline.get_variable_version("Result_A")
+        assert "X_0" in result_ver.dependencies
+
+

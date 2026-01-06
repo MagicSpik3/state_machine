@@ -1,3 +1,4 @@
+import code
 import pytest
 from spss_engine.pipeline import CompilerPipeline
 
@@ -26,10 +27,11 @@ class TestEndToEndPipeline:
 
         # 3. Verify State
         # Age was assigned twice (initially 0, then 1)
-        assert pipeline.get_variable_version("Age") == "AGE_1"
+        assert pipeline.get_variable_version("Age").id == "AGE_1"
 
         # Income was assigned once
-        assert pipeline.get_variable_version("Income") == "INCOME_0"
+        assert pipeline.get_variable_version("Income").id == "INCOME_0"
+
 
     def test_mixed_commands_flow(self):
         """
@@ -52,5 +54,5 @@ class TestEndToEndPipeline:
 
         # STRING Status -> STATUS_0
         # RECODE Status -> STATUS_1 (Because RECODE counts as assignment)
-        assert pipeline.get_variable_version("Status") == "STATUS_1"
-        assert pipeline.get_variable_version("Valid") == "VALID_0"
+        assert pipeline.get_variable_version("Status").id == "STATUS_1"
+        assert pipeline.get_variable_version("Valid").id == "VALID_0"

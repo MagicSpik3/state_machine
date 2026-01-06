@@ -39,3 +39,28 @@ class TestAssignmentExtractor:
         cmd = "FREQUENCIES x."
         target = AssignmentExtractor.extract_target(cmd)
         assert target is None
+
+
+    def test_extract_file_target(self):
+        """
+        Test extracting filenames from SAVE and MATCH commands.
+        """
+        extractor = AssignmentExtractor()
+        
+        # Case 1: SAVE OUTFILE (Single quotes)
+        cmd1 = "SAVE OUTFILE='control_values.sav'."
+        assert extractor.extract_file_target(cmd1) == "control_values.sav"
+        
+        # Case 2: SAVE TRANSLATE (Double quotes, mixed case)
+        cmd2 = 'SAVE TRANSLATE /outfile="Monthly_Report.csv" /TYPE=CSV.'
+        assert extractor.extract_file_target(cmd2) == "Monthly_Report.csv"
+        
+        # Case 3: MATCH FILES /TABLE (Lookup)
+        cmd3 = "MATCH FILES /FILE=* /TABLE='benefit_rates.sav'."
+        assert extractor.extract_file_target(cmd3) == "benefit_rates.sav"
+        
+        # Case 4: MATCH FILES /FILE (Merge)
+        cmd4 = "MATCH FILES /FILE='part1.sav' /FILE='part2.sav'."
+        # Our simple extractor should probably just grab the first valid file it finds 
+        # or we might need to handle multiple. For now, let's target the first one.
+        assert extractor.extract_file_target(cmd4) == "part1.sav"

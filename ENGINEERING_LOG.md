@@ -53,3 +53,52 @@
 1.  Integrate the `Repository` class (`repository.py`) to manage file loading.
 2.  Implement "Cross-File Dependencies" (e.g., `INSERT FILE` or `MATCH FILES`).
 3.
+
+### [2026-01-06] Phase 7: Repository Implementation
+**Status:** In Progress
+**Goal:** Enable batch processing of entire folders, not just single files.
+**Strategy:**
+1.  Create `Repository` class to recursively scan for `.spss` / `.sps` files.
+2.  **Constraint:** Must explicitly filter out non-code files (e.g., `.txt`, `README.md`) to prevent parsing errors.
+3.  **Refactor:** Update `statify.py` to use `Repository` instead of ad-hoc `os.walk` loops.
+
+### [2026-01-06] Maintenance: Conductor / Mock LLM Fix
+**Status:** Complete
+**Issue:** `test_describer.py` failed because the `MockLLM` update for the Conductor phase dropped source code from its output, causing assertion errors in prompt verification tests.
+**Fix:** Updated `MockLLM.describe_node` to echo the input source code, ensuring tests can verify data flow.
+
+
+### [2026-01-06] Phase 7: Repository & End-to-End Verification
+**Status:** Complete
+**Features:**
+1.  **Repository Class:** Implemented recursive file scanning with extension filtering (`.spss` only).
+2.  **Statify CLI Refactor:** Updated to use `Repository` and support `--output` directory (keeping source clean).
+3.  **End-to-End Test:** Created `tests/integration/test_end_to_end.py` which validates the full chain: `Source -> Compiler -> PSPP Runner -> Graph -> AI -> Markdown`.
+**Outcome:** The system now generates a "Verified" badge in the spec if the PSPP probe succeeds.
+
+
+### [2026-01-06] R Script Autopsy & The "Solid Graph" Mandate
+**Status:** Critical Milestone
+**Event:** Compared our Verified Spec against a generated R script for the same project.
+**Findings:**
+1.  **Verification Works:** Our `PsppRunner` correctly captured the legacy system's state.
+2.  **Generative AI Failed:** The R script contained 4 critical logic errors (Time Travel, Invisible Join, Date Format, Precision Drift).
+3.  **Root Cause:** The R script missed the `MATCH FILES` dependency, treating variables as "Magic Numbers" rather than derived data.
+**Decision:** We must strictly model `MATCH FILES` and `SAVE OUTFILE` in the Graph. We cannot proceed to Phase 8 (Code Gen) until the Graph is fully connected, merging the current 12 disconnected chapters into a single coherent flow.
+
+
+### [2026-01-06] Phase 7: Connectivity & The "File Bridge" Refactor
+**Status:** Complete
+**Goal:** Solve the "Fragmented Graph" problem where `MATCH FILES` commands broke the dependency chain, isolating variables into disconnected chapters.
+**Architecture Changes:**
+1.  **Parser Refactor:** Converted `SpssParser` from static methods to an instance-based class to support future stateful parsing features.
+2.  **The File Bridge:**
+    * **Parser:** Added support for `SAVE OUTFILE`, `SAVE TRANSLATE`, and `MATCH FILES`.
+    * **Extractor:** Implemented regex to target filenames (artifacts) in command strings.
+    * **State Machine:** Added a `file_registry`. When a script saves to `file.sav`, the state machine snapshots the current variable versions. When `MATCH FILES` loads `file.sav`, it creates dependency edges linking the new active variables back to those snapshots.
+3.  **Pipeline Logic:** Enhanced `process()` to handle nested assignments within `CONDITIONAL` blocks (e.g., `IF (x) COMPUTE y=1`), ensuring hidden logic wasn't missed.
+
+**Validation:**
+* **Regression:** All 48 tests (Unit & Integration) passed after significant refactoring of the API signatures.
+* **Real World:** Ran `statify` on `example_pspp_final.sps`. The generated Specification collapsed 12 disconnected chapters into a single "Super-Cluster" of logic, proving that the system correctly traced data flow through file I/O operations.
+* **Verification:** The "Verified Execution" badge is active, confirming the logic matches the ground truth from PSPP.

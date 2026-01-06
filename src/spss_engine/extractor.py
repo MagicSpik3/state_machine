@@ -104,3 +104,36 @@ class AssignmentExtractor:
                 dependencies.append(normalized)
 
         return list(set(dependencies))
+    
+
+    def extract_file_target(self, command: str) -> Optional[str]:
+        """
+        Extracts the filename from SAVE or MATCH commands.
+        """
+        # Simple heuristic: Look for 'file.sav' or "file.sav"
+        import re
+        match = re.search(r"(?:OUTFILE|TABLE|FILE)\s*=\s*['\"]([^'\"]+)['\"]", command, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        return None
+
+
+    def extract_file_target(self, command: str) -> Optional[str]:
+        """
+        Extracts the filename from SAVE or MATCH commands.
+        Looks for OUTFILE=, FILE=, or TABLE= followed by a quoted string.
+        """
+        # Regex explanation:
+        # (?: ... )  -> Non-capturing group for the keyword options
+        # \s*=\s* -> Equals sign with optional whitespace
+        # ['"]       -> Opening quote (single or double)
+        # ([^'"]+)   -> CAPTURE GROUP 1: Anything that isn't a quote
+        # ['"]       -> Closing quote
+        
+        pattern = r"(?:OUTFILE|TABLE|FILE)\s*=\s*['\"]([^'\"]+)['\"]"
+        
+        match = re.search(pattern, command, re.IGNORECASE)
+        if match:
+            return match.group(1)
+            
+        return None
