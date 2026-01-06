@@ -1,7 +1,6 @@
 import pytest
 from spss_engine.state import StateMachine
-from spss_engine.describer import SpecGenerator, MockLLM
-
+from spec_writer.describer import SpecGenerator, MockLLM
 
 class TestSpecGenerator:
 

@@ -1,6 +1,6 @@
 import os
 from spss_engine.pipeline import CompilerPipeline
-from spss_engine.graph import GraphGenerator
+from spec_writer.graph import GraphGenerator
 
 def main():
     # 1. Define the Payroll Logic

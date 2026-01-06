@@ -3,11 +3,25 @@ import os
 import argparse
 import logging
 import shutil
+import os
+import argparse
+import logging
+from typing import List
+
+
+# --- LEGACY CORE (The Engine) ---
+# These are the files still in src/spss_engine/
 from spss_engine.pipeline import CompilerPipeline
-from spss_engine.describer import SpecGenerator, OllamaClient
-from spss_engine.graph import GraphGenerator
 from spss_engine.repository import Repository
-from spss_engine.runner import PsppRunner  # <--- Import Verification Runner
+from spss_engine.runner import PsppRunner
+
+# --- SPEC WRITER (The Documenter) ---
+# These are the files we just moved to src/spec_writer/
+from spec_writer.conductor import Conductor
+from spec_writer.graph import GraphGenerator
+# FIX: Import 'SpecGenerator' instead of 'VariableDescriber'
+from spec_writer.describer import SpecGenerator, OllamaClient, MockLLM
+
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%H:%M:%S')

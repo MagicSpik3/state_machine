@@ -1,6 +1,6 @@
 import pytest
 from spss_engine.pipeline import CompilerPipeline
-from spss_engine.graph import GraphGenerator
+from spec_writer.graph import GraphGenerator
 
 
 class TestDataDependency:

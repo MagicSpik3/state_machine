@@ -1,7 +1,7 @@
 import os
 import pytest
 from spss_engine.state import StateMachine
-from spss_engine.graph import GraphGenerator
+from spec_writer.graph import GraphGenerator
 
 # Skip if graphviz is not installed to avoid breaking CI environments
 try:

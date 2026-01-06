@@ -1,7 +1,7 @@
 import sys
 import logging
 from spss_engine.pipeline import CompilerPipeline
-from spss_engine.describer import SpecGenerator, OllamaClient
+from spec_writer.describer import SpecGenerator, OllamaClient
 
 # Setup basic logging to see what's happening
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

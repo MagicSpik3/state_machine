@@ -4,7 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import List, Dict
 from spss_engine.state import StateMachine, VariableVersion
-from spss_engine.conductor import Conductor
+from spec_writer.conductor import Conductor
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,8 @@ class OllamaClient(LLMClient):
             f"Title:"
         )
         return self._call_ollama(prompt, max_tokens=20)
+    
+    
 class SpecGenerator:
     """
     Orchestrates the conversion of State Machine logic into a Structured Report.

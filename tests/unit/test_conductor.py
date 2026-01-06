@@ -1,6 +1,6 @@
 import pytest
 from spss_engine.state import StateMachine
-from spss_engine.conductor import Conductor
+from spec_writer.conductor import Conductor
 
 
 class TestConductor:

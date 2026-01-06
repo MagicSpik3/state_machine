@@ -1,5 +1,5 @@
 from spss_engine.pipeline import CompilerPipeline
-from spss_engine.graph import GraphGenerator
+from spec_writer.graph import GraphGenerator
 
 def main():
     # Scenario: 'temp' is calculated but never used. 'x' is overwritten.
