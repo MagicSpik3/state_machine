@@ -54,3 +54,29 @@ class TestRGenerator:
         assert "Imports:" in desc
         assert "dplyr" in desc
         assert "lubridate" in desc
+
+
+    def test_generate_conditional_logic(self):
+        """
+        Scenario: Conditional Assignment
+        SPSS: IF (Age >= 18) Status = 1.
+        R: mutate(Status = if_else(Age >= 18, 1, Status))
+        """
+        state = StateMachine()
+        
+        # 1. Register the conditional logic
+        # Note: The parser treats "IF" as a CONDITIONAL event, but the logic 
+        # inside is an assignment. 
+        # Our pipeline registers this as an assignment with source="IF (Age >= 18) Status = 1."
+        
+        src = "IF (Age >= 18) Status = 1."
+        state.register_assignment("Status", src, dependencies=["AGE_0"])
+        
+        writer = RGenerator(state)
+        script = writer.generate_script()
+        
+        # Expectation: dplyr if_else
+        # logic: if_else(condition, true_val, false_val/current_val)
+        assert "if_else" in script
+        assert "Age >= 18" in script
+        assert "1" in script        

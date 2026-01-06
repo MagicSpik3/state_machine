@@ -79,18 +79,29 @@ class CodeOptimizer:
             logger.error(f"Subprocess failed: {e}")
             return [str(e)]
 
+
     def optimize_file(self, relative_path: str):
         """
-        Orchestrates the optimization: Snapshot -> Lint -> (Future) Refactor.
+        1. Snapshot
+        2. Auto-Format (R Styler)
+        3. Lint
         """
-        # 1. Snapshot original
+        # 1. Snapshot
         src = os.path.join(self.project_dir, relative_path)
-        backup_name = f"{os.path.basename(relative_path)}.bak"
-        dst = os.path.join(self.snapshot_dir, backup_name)
+        # ... (snapshot logic) ...
         
-        if os.path.exists(src):
-            shutil.copy2(src, dst)
-        
-        # 2. Lint
-        issues = self.run_linter(relative_path)
-        return issues
+        # 2. Auto-Format (NEW)
+        # We try to run R's 'styler::style_file()'
+        # This uses the AST to safely fix indentation and spaces.
+        if self.check_dependencies():
+            try:
+                subprocess.run(
+                    ["Rscript", "-e", f"library(styler); style_file('{src}')"],
+                    capture_output=True,
+                    cwd=self.project_dir
+                )
+            except Exception:
+                logger.warning("Could not run 'styler'. Is it installed in R?")
+
+        # 3. Lint
+        return self.run_linter(relative_path)

@@ -2,7 +2,6 @@ from typing import List, Dict, Set
 from collections import defaultdict, deque
 from spss_engine.state import StateMachine
 
-
 class Conductor:
     """
     Organizes the flat list of variables into logical 'Chapters' (Clusters)
