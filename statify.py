@@ -4,6 +4,8 @@ import argparse
 import logging
 import shutil
 from typing import List
+from spec_writer.review import ProjectArchitect
+from code_forge.refiner import CodeRefiner
 from code_forge.runner import RRunner
 
 # --- CODE FORGE (The Builder) ---
@@ -16,7 +18,8 @@ from spss_engine.runner import PsppRunner
 
 # --- SPEC WRITER (The Documenter) ---
 from spec_writer.graph import GraphGenerator
-from spec_writer.describer import SpecGenerator, OllamaClient
+from spec_writer.describer import SpecGenerator
+from common.llm import OllamaClient # Correct Import
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%H:%M:%S')
@@ -31,7 +34,7 @@ def ensure_output_dir(base_output_dir: str, relative_path: str) -> str:
     os.makedirs(target_dir, exist_ok=True)
     return target_dir
 
-def process_file(full_path: str, relative_path: str, output_root: str, model: str, generate_code: bool):
+def process_file(full_path: str, relative_path: str, output_root: str, model: str, generate_code: bool, refine_mode: bool):
     """
     Orchestrates the conversion pipeline for a single file.
     """
@@ -82,36 +85,40 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
     generator = SpecGenerator(pipeline.state_machine, client)
     
     logger.info("  📝 Writing Specification...")
-    report = generator.generate_report(dead_ids=dead_vars, runtime_values=runtime_values)
+    # FIX: Captured into 'spec_content' so it is available for the Architect later
+    spec_content = generator.generate_report(dead_ids=dead_vars, runtime_values=runtime_values)
     
     report_file = os.path.join(target_dir, f"{base_name}_spec.md")
     with open(report_file, "w") as f:
-        f.write(report)
+        f.write(spec_content)
 
     # 6. Code Generation Phase
     if generate_code:
         logger.info("  ⚙️  Generating R Code...")
         r_gen = RGenerator(pipeline.state_machine)
         
-        # A. Script
+        # A. Rough Draft
         r_code = r_gen.generate_script()
+        
+        # B. AI Refinement (NEW)
+        if refine_mode: # We will pass this arg in
+            refiner = CodeRefiner(model="qwen2.5-coder:latest")
+            r_code = refiner.refine(r_code)
+
+        # C. Save
         r_path = os.path.join(target_dir, f"{base_name}.R")
         with open(r_path, "w", encoding="utf-8") as f:
             f.write(r_code)
-        
-        # B. Description File (NEW)
-        # We use the base_name as the package name (sanitized)
+            
+        # D. Description File
         pkg_name = "".join(x for x in base_name if x.isalnum())
         desc_content = r_gen.generate_description(pkg_name)
         desc_path = os.path.join(target_dir, "DESCRIPTION")
-        
         with open(desc_path, "w", encoding="utf-8") as f:
             f.write(desc_content)
-            
         logger.info(f"  📦 Saved Package Metadata: {desc_path}")
-
         
-        # 7. EQUIVALENCE CHECK (The "Money where your mouth is" step)
+        # 7. EQUIVALENCE CHECK
         if runtime_values:
             logger.info("  ⚖️  Running Equivalence Check (Black Box vs White Box)...")
             
@@ -122,30 +129,20 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
             mismatches = 0
             
             for key, legacy_raw in runtime_values.items():
-                # Normalize Key
                 key = key.upper()
-                
                 if key in r_results:
                     new_val = r_results[key]
-                    
-                    # 1. Try Numeric Comparison
                     try:
                         leg_float = float(legacy_raw)
                         new_float = float(new_val)
-                        
-                        # Tolerance for floating point math
                         if abs(leg_float - new_float) < 0.001:
                             matches += 1
                         else:
                             mismatches += 1
                             logger.error(f"    ❌ MISMATCH on {key}: SPSS={leg_float} | R={new_float}")
-                            
-                    # 2. Fallback to String Comparison (for non-numeric statuses)
                     except (ValueError, TypeError):
-                        # Clean whitespace and case
                         leg_str = str(legacy_raw).strip().upper()
                         new_str = str(new_val).strip().upper()
-                        
                         if leg_str == new_str:
                             matches += 1
                         else:
@@ -160,10 +157,26 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
                 logger.warning("  ❓ No overlapping variables found to compare.")
 
 
+    # 8. ARCHITECTURAL REVIEW
+    if refine_mode: 
+        logger.info("  🏛️  Summoning the Architect...")
+        
+        # Read the artifacts we just generated
+        with open(r_path, 'r') as f:
+            final_r_code = f.read()
+            
+        # Spec content is now available from step 5
+        architect = ProjectArchitect(OllamaClient(model="mistral:instruct"))
+        review_report = architect.review(final_r_code, spec_content)
+        
+        # Save the Review
+        review_path = os.path.join(target_dir, f"{base_name}_REVIEW.md")
+        with open(review_path, 'w') as f:
+            f.write(review_report)
+            
+        logger.info(f"  📝 Architectural Review Saved: {review_path}")
 
-
-
-def process_directory(source_root: str, output_root: str, model: str, generate_code: bool):
+def process_directory(source_root: str, output_root: str, model: str, generate_code: bool, refine_mode: bool):
     logger.info(f"📂 Scanning Repository: {source_root}")
     logger.info(f"💾 Output Target: {output_root}")
     
@@ -182,7 +195,7 @@ def process_directory(source_root: str, output_root: str, model: str, generate_c
         logger.info(f"[{i}/{total}] Starting: {rel_path}")
         
         try:
-            process_file(full_path, rel_path, output_root, model, generate_code)
+            process_file(full_path, rel_path, output_root, model, generate_code, refine_mode)
         except Exception as e:
             logger.error(f"❌ Failed to process {rel_path}: {e}")
             errors.append(rel_path)
@@ -197,9 +210,8 @@ def main():
     parser.add_argument("path", help="Path to SPSS source file or directory")
     parser.add_argument("--output", "-o", default="./dist", help="Directory to save generated documentation")
     parser.add_argument("--model", default="mistral:instruct", help="Ollama model to use")
-    
-    # Correct place for argument definition
     parser.add_argument("--code", action="store_true", help="Generate R code alongside the spec")
+    parser.add_argument("--refine", action="store_true", help="Use AI to refine the generated code")
     
     args = parser.parse_args()
     
@@ -209,9 +221,9 @@ def main():
     if os.path.isfile(source_path):
         root_dir = os.path.dirname(source_path)
         rel_path = os.path.relpath(source_path, root_dir)
-        process_file(source_path, rel_path, output_path, args.model, args.code)
+        process_file(source_path, rel_path, output_path, args.model, args.code, args.refine)
     elif os.path.isdir(source_path):
-        process_directory(source_path, output_path, args.model, args.code)
+        process_directory(source_path, output_path, args.model, args.code, args.refine)
     else:
         logger.error(f"Path not found: {source_path}")
 

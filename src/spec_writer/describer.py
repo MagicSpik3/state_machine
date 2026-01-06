@@ -1,90 +1,17 @@
-import requests
-import json
 import logging
-from abc import ABC, abstractmethod
 from typing import List, Dict
 from spss_engine.state import StateMachine, VariableVersion
 from spec_writer.conductor import Conductor
+from common.llm import OllamaClient
+from common.prompts import DESCRIBE_NODE_PROMPT, GENERATE_TITLE_PROMPT
 
 logger = logging.getLogger(__name__)
 
-
-class LLMClient(ABC):
-    @abstractmethod
-    def describe_node(self, node_id: str, source: str, dependencies: List[str]) -> str:
-        pass
-
-    @abstractmethod
-    def generate_title(self, variables: List[str]) -> str:
-        """Generates a short title for a cluster of variables."""
-        pass
-
-class MockLLM(LLMClient):
-    def describe_node(self, node_id: str, source: str, dependencies: List[str]) -> str:
-        # FIX: We must include dependencies in the string so the test can assert they were passed correctly.
-        dep_str = ", ".join(dependencies)
-        return f"Description of {node_id} (Source: {source}) (Deps: {dep_str})"
-        
-    def generate_title(self, variables: List[str]) -> str:
-        return "Logic Cluster"
-
-
-class OllamaClient(LLMClient):
-    def __init__(
-        self,
-        model: str = "mistral:instruct",
-        endpoint: str = "http://localhost:11434/api/generate",
-    ):
-        self.model = model
-        self.endpoint = endpoint
-
-    def _call_ollama(self, prompt: str, max_tokens: int = 150) -> str:
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.1, "num_predict": max_tokens},
-        }
-        try:
-            response = requests.post(
-                self.endpoint, headers=headers, json=payload, timeout=30
-            )
-            response.raise_for_status()
-            text = response.json().get("response", "").strip()
-            # Clean quotes
-            if text.startswith('"') and text.endswith('"'):
-                text = text[1:-1]
-            return text
-        except Exception as e:
-            logger.error(f"Ollama Error: {e}")
-            return "[AI Error]"
-
-    def describe_node(self, node_id: str, source: str, dependencies: List[str]) -> str:
-        prompt = (
-            f"You are a Business Analyst. Describe this logic step in ONE sentence.\n"
-            f"Context: {node_id} depends on {', '.join(dependencies)}\n"
-            f"Code: {source}\n"
-            f"Description:"
-        )
-        return self._call_ollama(prompt)
-
-    def generate_title(self, variables: List[str]) -> str:
-        # If the cluster is huge, just take the first 10 vars to avoid context limits
-        sample = ", ".join(variables[:10])
-        prompt = (
-            f"Summarize these variables into a 3-5 word Title.\n"
-            f"Variables: {sample}\n"
-            f"Title:"
-        )
-        return self._call_ollama(prompt, max_tokens=20)
-    
-    
 class SpecGenerator:
     """
     Orchestrates the conversion of State Machine logic into a Structured Report.
     """
-    def __init__(self, state_machine: StateMachine, llm_client: LLMClient):
+    def __init__(self, state_machine: StateMachine, llm_client: OllamaClient):
         self.state_machine = state_machine
         self.llm = llm_client
         self.conductor = Conductor(state_machine)
@@ -113,7 +40,7 @@ class SpecGenerator:
                 
             # 2. Extract Variable Names for Titling
             var_names = list(set([nid.rsplit('_', 1)[0] for nid in live_nodes]))
-            chapter_title = self.llm.generate_title(var_names)
+            chapter_title = self._generate_title(var_names)
             report_lines.append(f"## Chapter {i+1}: {chapter_title}")
             
             # 3. Describe Nodes
@@ -121,12 +48,10 @@ class SpecGenerator:
                 version_obj = self._find_version(node_id)
                 if version_obj:
                     # Logic Description
-                    desc = self.llm.describe_node(node_id, version_obj.source, version_obj.dependencies)
+                    desc = self._describe_node(node_id, version_obj.source, version_obj.dependencies)
                     line = f"* **{node_id}**: {desc}"
                     
                     # Add Runtime Verification (if available)
-                    # Node ID is "NET_PAY_0", but PSPP CSV usually returns "NET_PAY".
-                    # We map by variable name.
                     var_name = node_id.rsplit('_', 1)[0]
                     if var_name in runtime_values:
                         val = runtime_values[var_name]
@@ -145,3 +70,22 @@ class SpecGenerator:
             if v.id == node_id:
                 return v
         return None
+
+    def _describe_node(self, node_id: str, source: str, dependencies: List[str]) -> str:
+        prompt = DESCRIBE_NODE_PROMPT.format(
+            node_id=node_id, 
+            dependencies=', '.join(dependencies), 
+            source=source
+        )
+        try:
+            return self.llm.generate(prompt)
+        except Exception:
+            return "Description unavailable (AI Error)"
+
+    def _generate_title(self, variables: List[str]) -> str:
+        sample = ", ".join(variables[:10])
+        prompt = GENERATE_TITLE_PROMPT.format(variables=sample)
+        try:
+            return self.llm.generate(prompt, max_tokens=20)
+        except Exception:
+            return "Logic Cluster"

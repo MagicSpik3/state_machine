@@ -117,3 +117,37 @@
     * Executes Legacy Code (PSPP) and New Code (R) in parallel.
     * Compares output variables with type-aware logic (Float vs String handling).
 **Result:** Achieved `✅ PROVEN EQUIVALENCE` on the Payroll Demo.
+
+
+### [2026-01-06] Phase 10: The Rosetta Stone & Robust Translation
+**Status:** Complete
+**Goal:** Handle complex legacy syntax (Date Math, Joins, Modulo) without brittle regex hacking.
+**Achievements:**
+1.  **The Rosetta Stone:** Created `src/code_forge/rosetta.py` as a centralized dictionary for SPSS -> R translations.
+2.  **Smart Parsing:** Implemented `_split_args` to handle nested parentheses in function calls (e.g., `DATE.MDY(TRUNC(MOD(...)))`).
+3.  **Join Logic:** `RGenerator` now detects `MATCH FILES` and transpiles them into `dplyr::left_join`.
+4.  **TDD Discipline:** Wrote unit tests (`test_rosetta.py`, `test_generator_joins.py`) *before* implementation to ensure robustness.
+**Result:**  the unit test suite is 100% Green (63 tests).
+
+
+### [2026-01-06] Phase 11: Architecture Hardening (AI Abstraction)
+**Status:** In Progress
+**Goal:** Prevent AI timeouts from corrupting generated code and centralize LLM configuration.
+**Issues:**
+* `OllamaClient` timeout (30s) is too short for code refactoring.
+* Exception swallowing in `OllamaClient` caused `[AI Error]` to be written as source code.
+**Actions:**
+1.  **Refactor:** Extract `OllamaClient` to `src/common/llm.py`.
+2.  **Refactor:** Extract prompts to `src/common/prompts.py`.
+3.  **Resilience:** Increase default timeout to 120s.
+4.  **Safety:** Ensure `CodeRefiner` falls back to "Rough Draft" code on AI failure.
+
+### [2026-01-06] Phase 11: Architecture Hardening & AI Refinement
+**Status:** Complete
+**Goal:** Integrate GenAI to clean up complex syntax without breaking the build.
+**Achievements:**
+1.  **Refactoring:** Centralized AI logic in `src/common` to eliminate circular dependencies and dead code.
+2.  **Safety:** Implemented a "Fall Back to Rough Draft" strategy. If the AI times out or hallucinations, the system uses the deterministic (but ugly) transpiled code.
+3.  **Integration Testing:** Added `test_refinement_flow.py` to verify the "Handshake" between the Generator and the AI service.
+4.  **Verification:** `demo_refine.py` proved that `qwen2.5-coder` can successfully refactor multi-line SPSS legacy date logic into clean `lubridate::make_date` calls.
+**Result:** System is now resilient to AI failures and capable of producing human-grade R code.

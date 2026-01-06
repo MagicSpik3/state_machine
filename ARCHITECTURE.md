@@ -6,6 +6,28 @@
 ### 📄 `__init__.py`
 
 ---
+## 📦 Package: `src/common`
+
+### 📄 `__init__.py`
+
+---
+
+### 📄 `llm.py`
+**Imports:**
+- `from typing import Optional`
+- `import logging`
+- `import requests`
+
+**Definitions:**
+- 🏛️ **Class** `OllamaClient`
+    - `def __init__(...)`
+    - `def generate(...)`
+
+---
+
+### 📄 `prompts.py`
+
+---
 ## 📦 Package: `src/spec_writer`
 
 ### 📄 `__init__.py`
@@ -33,16 +55,15 @@
 
 ### 📄 `describer.py`
 **Imports:**
-- `from abc import ABC`
-- `from abc import abstractmethod`
+- `from common.llm import OllamaClient`
+- `from common.prompts import DESCRIBE_NODE_PROMPT`
+- `from common.prompts import GENERATE_TITLE_PROMPT`
 - `from spec_writer.conductor import Conductor`
 - `from spss_engine.state import StateMachine`
 - `from spss_engine.state import VariableVersion`
 - `from typing import Dict`
 - `from typing import List`
-- `import json`
 - `import logging`
-- `import requests`
 
 **Definitions:**
 - 🏛️ **Class** `LLMClient`
@@ -51,13 +72,11 @@
 - 🏛️ **Class** `MockLLM`
     - `def describe_node(...)`
     - `def generate_title(...)`
-- 🏛️ **Class** `OllamaClient`
-    - `def __init__(...)`
-    - `def _call_ollama(...)`
-    - `def describe_node(...)`
-    - `def generate_title(...)`
 - 🏛️ **Class** `SpecGenerator`
     - `def __init__(...)`
+    - `def _generate_title(...)`
+    - `def _describe_node(...)`
+    - `def _generate_title(...)`
     - `def generate_report(...)`
     - `def _find_version(...)`
 
@@ -84,6 +103,7 @@
 
 ### 📄 `generator.py`
 **Imports:**
+- `from code_forge.rosetta import RosettaStone`
 - `from spss_engine.state import StateMachine`
 - `from spss_engine.state import VariableVersion`
 - `from typing import Dict`
@@ -119,6 +139,50 @@
     - `def check_dependencies(...)`
     - `def run_linter(...)`
     - `def optimize_file(...)`
+
+---
+
+### 📄 `refiner.py`
+**Imports:**
+- `from common.llm import OllamaClient`
+- `from common.prompts import REFINE_CODE_PROMPT`
+- `import logging`
+
+**Definitions:**
+- 🏛️ **Class** `CodeRefiner`
+    - `def __init__(...)`
+    - `def refine(...)`
+
+---
+
+### 📄 `rosetta.py`
+**Imports:**
+- `from typing import List`
+- `from typing import Tuple`
+- `import re`
+
+**Definitions:**
+- 🏛️ **Class** `RosettaStone`
+    - `def _split_args(...)`
+    - `def translate_expression(...)`
+
+---
+
+### 📄 `runner.py`
+**Imports:**
+- `from typing import Dict`
+- `from typing import Optional`
+- `import csv`
+- `import logging`
+- `import os`
+- `import pandas`
+- `import subprocess`
+
+**Definitions:**
+- 🏛️ **Class** `RRunner`
+    - `def __init__(...)`
+    - `def run_and_capture(...)`
+    - `def _read_first_row(...)`
 
 ---
 ## 📦 Package: `src/spss_engine`
