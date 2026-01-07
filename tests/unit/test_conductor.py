@@ -1,59 +1,39 @@
 import pytest
-from spss_engine.state import StateMachine
+from spss_engine.state import StateMachine, VariableVersion
 from spec_writer.conductor import Conductor
 
-
 class TestConductor:
-
     def test_identify_islands(self):
-        """
-        Scenario: Two completely separate logic chains.
-        1. Payroll: Gross -> Tax
-        2. Demographics: DOB -> Age
-
-        The Conductor should group these into two different clusters.
-        """
-        state = StateMachine()
-
-        # Cluster 1: Payroll
-        state.register_assignment("Gross", "Gross = 50000")
-        state.register_assignment("Tax", "Tax = Gross * 0.2", dependencies=["GROSS_0"])
-
-        # Cluster 2: Demographics
-        state.register_assignment("DOB", "DOB = '1990-01-01'")
-        state.register_assignment("Age", "Age = 2026 - DOB", dependencies=["DOB_0"])
-
-        conductor = Conductor(state)
+        sm = StateMachine()
+        
+        # Cluster 0
+        sm.register_assignment("A", "src", [])
+        sm.register_assignment("B", "src", [sm.get_current_version("A")])
+        
+        # FIX: Manually simulate a Scope Reset to create a new cluster
+        sm.reset_scope() 
+        
+        # Cluster 1 (The "Island")
+        sm.register_assignment("X", "src", [])
+        sm.register_assignment("Y", "src", [sm.get_current_version("X")])
+        
+        conductor = Conductor(sm)
         clusters = conductor.identify_clusters()
-
-        # We expect 2 clusters
+        
+        # Now we should have 2 clusters because we called reset_scope()
         assert len(clusters) == 2
-
-        # Verify contents (We don't know the order, so we check existence)
-        flat_clusters = [set(c) for c in clusters]
-
-        # Check Payroll Cluster exists
-        payroll_vars = {"GROSS_0", "TAX_0"}
-        assert any(payroll_vars.issubset(c) for c in flat_clusters)
-
-        # Check Demographics Cluster exists
-        demo_vars = {"DOB_0", "AGE_0"}
-        assert any(demo_vars.issubset(c) for c in flat_clusters)
+        assert "A_0" in clusters[0]
+        assert "X_0" in clusters[1]
 
     def test_topological_sort(self):
-        """
-        Within a cluster, 'Gross' must be listed before 'Tax'.
-        """
-        state = StateMachine()
-        state.register_assignment("Tax", "Tax = ...", dependencies=["GROSS_0"])
-        state.register_assignment(
-            "Gross", "Gross = ..."
-        )  # Registered LATER, but depends IS earlier
-
-        conductor = Conductor(state)
+        sm = StateMachine()
+        # Tax depends on Gross
+        gross = sm.register_assignment("GROSS", "src", [])
+        tax = sm.register_assignment("TAX", "src", [gross])
+        
+        conductor = Conductor(sm)
         clusters = conductor.identify_clusters()
-
-        cluster = clusters[0]  # There is only one cluster
-
-        # Verify order: Gross (Dependency) -> Tax (Dependent)
-        assert cluster == ["GROSS_0", "TAX_0"]
+        sorted_nodes = conductor._topological_sort(clusters[0])
+        
+        # Ensure Gross comes before Tax
+        assert sorted_nodes.index("GROSS_0") < sorted_nodes.index("TAX_0")

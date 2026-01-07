@@ -1,140 +1,115 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Set, Optional
 from dataclasses import dataclass, field
 
 @dataclass
 class VariableVersion:
-    id: str               # e.g., "AGE_0"
-    source: str           # e.g., "COMPUTE Age = 25."
-    dependencies: List[str] = field(default_factory=list) # e.g., ["DOB_0"]
+    name: str
+    version: int
+    source: str 
+    dependencies: List['VariableVersion'] = field(default_factory=list)
+    cluster_index: int = 0
+    
+    @property
+    def id(self):
+        return f"{self.name}_{self.version}"
+
+@dataclass
+class ClusterMetadata:
+    index: int
+    inputs: Set[str] = field(default_factory=set)
+    outputs: Set[str] = field(default_factory=set)
+    node_count: int = 0 
 
 class StateMachine:
-    """
-    Tracks the lifecycle of variables (SSA) and manages the Symbol Table.
-    """
     def __init__(self):
-        self.symbol_table: Dict[str, int] = {}  # Map: "AGE" -> 0 (Current Index)
-        self.history_ledger: Dict[str, List[VariableVersion]] = {} # Map: "AGE" -> [AGE_0, AGE_1]
+        self.history_ledger: Dict[str, List[VariableVersion]] = {}
+        self.nodes: List[VariableVersion] = []
+        self.conditionals: List[str] = []
+        self.control_flow: List[str] = []
         
-        # BRIDGE LOGIC: Tracks file snapshots
-        self.file_registry: Dict[str, List[str]] = {} # Map: "file.sav" -> ["AGE_0", "STATUS_1"]
-
-    def _normalize(self, var_name: str) -> str:
-        return var_name.strip().upper()
-
-    def get_current_version(self, var_name: str) -> str:
-        """Returns the ID of the current active version (e.g., 'AGE_1')."""
-        norm_name = self._normalize(var_name)
-        if norm_name not in self.symbol_table:
-            raise ValueError(f"Variable {var_name} is not defined.")
-        idx = self.symbol_table[norm_name]
-        return f"{norm_name}_{idx}"
+        self.clusters: List[ClusterMetadata] = [ClusterMetadata(index=0)]
+        self.current_cluster_index = 0
 
     def get_history(self, var_name: str) -> List[VariableVersion]:
-        norm_name = self._normalize(var_name)
-        return self.history_ledger.get(norm_name, [])
+        return self.history_ledger.get(var_name.upper(), [])
 
-    def register_assignment(self, target: str, source_code: str, dependencies: List[str] = None):
-        """
-        Creates a new SSA version for the target variable.
-        """
-        if dependencies is None:
-            dependencies = []
+    def get_current_version(self, var_name: str) -> VariableVersion:
+        history = self.get_history(var_name)
+        if not history:
+            raise ValueError(f"Variable {var_name} not found in history.")
+        return history[-1]
+
+    def register_assignment(self, var_name: str, source: str, dependencies: List[VariableVersion] = None):
+        if dependencies is None: dependencies = []
             
-        norm_target = self._normalize(target)
+        var_upper = var_name.upper()
+        history = self.get_history(var_upper)
+        new_version_num = len(history)
         
-        # Increment version index (SSA)
-        if norm_target not in self.symbol_table:
-            self.symbol_table[norm_target] = 0
-        else:
-            self.symbol_table[norm_target] += 1
+        new_node = VariableVersion(
+            name=var_upper, 
+            version=new_version_num, 
+            source=source, 
+            dependencies=dependencies,
+            cluster_index=self.current_cluster_index 
+        )
+        
+        if var_upper not in self.history_ledger:
+            self.history_ledger[var_upper] = []
             
-        idx = self.symbol_table[norm_target]
-        version_id = f"{norm_target}_{idx}"
+        self.history_ledger[var_upper].append(new_node)
+        self.nodes.append(new_node)
+        self._get_current_cluster().node_count += 1
+        return new_node
+
+    def register_conditional(self, command: str):
+        self.conditionals.append(command)
+
+    def register_control_flow(self, command: str):
+        self.control_flow.append(command)
         
-        # Record history
-        new_version = VariableVersion(id=version_id, source=source_code, dependencies=dependencies)
-        
-        if norm_target not in self.history_ledger:
-            self.history_ledger[norm_target] = []
-        self.history_ledger[norm_target].append(new_version)
-
-    # --- CONTROL FLOW HANDLERS ---
-    # Currently we treat these as markers, but eventually they will handle Phi functions.
-    
-    def register_conditional(self, source_code: str):
-        """
-        Registers a branching event (IF / DO IF).
-        For now, this is a placeholder to prevent the Pipeline from crashing.
-        In Phase 8, this will trigger a Stack Push.
-        """
-        pass 
-
-    def register_control_flow(self, source_code: str):
-        """
-        Registers flow changes (ELSE, END IF, EXECUTE).
-        """
-        pass
-
-    # --- FILE BRIDGE HANDLERS (New) ---
-
-    def register_file_save(self, filename: str, source_code: str):
-        """
-        Snapshots the current symbol table into a file registry.
-        """
-        # Store the current version ID of every active variable
-        current_snapshot = []
-        for var, idx in self.symbol_table.items():
-            current_snapshot.append(f"{var}_{idx}")
-        
-        self.file_registry[filename] = current_snapshot
-
-    def register_file_match(self, filename: str, source_code: str):
-        """
-        Simulates loading a file by linking current variables to the snapshot versions.
-        """
-        if filename in self.file_registry:
-            snapshot_versions = self.file_registry[filename]
-            
-            for upstream_id in snapshot_versions:
-                # upstream_id looks like "AGE_0"
-                # We want to create a NEW version "AGE_1" that depends on "AGE_0"
-                # This creates the visible bridge in the graph.
-                
-                var_name = upstream_id.rsplit('_', 1)[0]
-                
-                self.register_assignment(
-                    target=var_name,
-                    source_code=f"MATCH FILES from '{filename}'",
-                    dependencies=[upstream_id]
-                )
-
-    # --- ANALYSIS ---
-
     def find_dead_versions(self) -> List[str]:
-        """
-        Identifies versions that are never used as a dependency for any subsequent version.
-        Excludes the 'Current' (final) version of any variable.
-        """
-        used_dependencies = set()
-        
-        # 1. Collect all used dependencies
-        for history in self.history_ledger.values():
-            for version in history:
-                for dep in version.dependencies:
-                    used_dependencies.add(dep)
-        
-        dead_versions = []
-        
-        # 2. Check each version
+        usage_map = {node.id: 0 for node in self.nodes}
+        for node in self.nodes:
+            for dep in node.dependencies:
+                usage_map[dep.id] += 1
+        dead_ids = []
         for var_name, history in self.history_ledger.items():
-            current_idx = self.symbol_table[var_name]
-            current_id = f"{var_name}_{current_idx}"
-            
-            for version in history:
-                # A version is DEAD if:
-                # 1. It is NOT in the used set
-                # 2. It is NOT the final current state (which is implicitly "used" by the output)
-                if version.id not in used_dependencies and version.id != current_id:
-                    dead_versions.append(version.id)
-                    
-        return dead_versions
+            for i, ver in enumerate(history):
+                if i == len(history) - 1: continue
+                if usage_map[ver.id] == 0: dead_ids.append(ver.id)
+        return dead_ids
+
+    def _get_current_cluster(self) -> ClusterMetadata:
+        return self.clusters[self.current_cluster_index]
+
+    def register_input_file(self, filename: str):
+        clean_name = filename.strip("'").strip('"').strip()
+        if clean_name: self._get_current_cluster().inputs.add(clean_name)
+
+    def register_output_file(self, filename: str):
+        clean_name = filename.strip("'").strip('"').strip()
+        if clean_name: self._get_current_cluster().outputs.add(clean_name)
+
+    def reset_scope(self):
+        """
+        Finalizes the current cluster and starts a new one.
+        PREVENTS EMPTY CLUSTERS: If the current cluster is pristine (unused),
+        we do not advance the index.
+        """
+        current = self._get_current_cluster()
+        
+        # Check if pristine: No nodes, No inputs, No outputs
+        is_pristine = (current.node_count == 0) and \
+                      (len(current.inputs) == 0) and \
+                      (len(current.outputs) == 0)
+                      
+        self.history_ledger.clear()
+        
+        if is_pristine:
+            # We are at the start of the script (or repeated resets). 
+            # Stay on the current cluster.
+            return
+
+        self.current_cluster_index += 1
+        self.clusters.append(ClusterMetadata(index=self.current_cluster_index))

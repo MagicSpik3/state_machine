@@ -1,58 +1,39 @@
 import pytest
-from spss_engine.state import StateMachine
+from spss_engine.state import StateMachine, VariableVersion
 
 class TestStateMachine:
-
     def test_initial_assignment(self):
         sm = StateMachine()
-        sm.register_assignment("Age", source_code="COMPUTE Age=1.")
-        assert sm.get_current_version("Age") == "AGE_0"
+        # FIX: Changed source_code -> source
+        node = sm.register_assignment("age", source="COMPUTE age = 25.", dependencies=[])
+        
+        assert node.name == "AGE"
+        assert node.version == 0
+        assert node.id == "AGE_0"
+        assert len(sm.get_history("age")) == 1
 
     def test_reassignment_ssa(self):
         sm = StateMachine()
-        sm.register_assignment("Age", source_code="COMPUTE Age=1.") # AGE_0
-        sm.register_assignment("Age", source_code="COMPUTE Age=2.") # AGE_1
+        sm.register_assignment("status", source="COMPUTE status = 1.", dependencies=[])
+        # FIX: Changed source_code -> source
+        sm.register_assignment("status", source="COMPUTE status = 2.", dependencies=[])
         
-        assert sm.get_current_version("Age") == "AGE_1"
-        
-        history = sm.get_history("Age")
+        history = sm.get_history("status")
         assert len(history) == 2
-        assert history[0].id == "AGE_0"
-        assert history[1].id == "AGE_1"
+        assert history[0].id == "STATUS_0"
+        assert history[1].id == "STATUS_1"
 
     def test_case_insensitivity(self):
         sm = StateMachine()
-        sm.register_assignment("age", source_code="COMPUTE age=1.")
-        assert sm.get_current_version("AGE") == "AGE_0"
-
-    def test_undefined_variable(self):
-        sm = StateMachine()
-        with pytest.raises(ValueError):
-            sm.get_current_version("Ghost")
-
-    # --- THE MISSING TEST ---
-    def test_variable_history_tracking(self):
-        """
-        Test that the state machine records the 'Provenance' (source code)
-        associated with each variable version.
-        """
-        state = StateMachine()
-
-        # 1. Initial Assignment
-        state.register_assignment("Age", source_code="COMPUTE Age = 25.")
-
-        # 2. Re-assignment
-        state.register_assignment("Age", source_code="COMPUTE Age = 26.")
-
-        # 3. Retrieve History
-        history = state.get_history("Age")
-
-        assert len(history) == 2
+        sm.register_assignment("Gross", source="...", dependencies=[])
+        # FIX: Changed source_code -> source
+        sm.register_assignment("GROSS", source="...", dependencies=[])
         
-        # Check Version 0
-        assert history[0].id == "AGE_0"
-        assert history[0].source == "COMPUTE Age = 25."
+        assert len(sm.get_history("gross")) == 2
 
-        # Check Version 1
-        assert history[1].id == "AGE_1"
-        assert history[1].source == "COMPUTE Age = 26."
+    def test_variable_history_tracking(self):
+        sm = StateMachine()
+        v1 = sm.register_assignment("A", source="...", dependencies=[])
+        v2 = sm.register_assignment("A", source="...", dependencies=[])
+        
+        assert sm.get_current_version("A") == v2

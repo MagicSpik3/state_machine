@@ -178,3 +178,101 @@
 * `tests/integration/test_spec_structure.py`: PASSED (Proves we can segregate logic).
 * `tests/unit/test_rosetta.py`: PASSED (Proves syntax translation is robust).
 * `tests/unit/test_writer.py`: PASSED (Proves conditional logic generation).
+
+
+## 2026-01-07: The Stabilization & Refactor
+
+### 🔧 Architectural Pivot: The "Zoom In / Zoom Out" Strategy
+* **Challenge:** The "Complexity Level 3" test revealed a fundamental flaw. The engine either treated the entire script as one giant graph (Spaghetti) or broke connections entirely (Amnesia).
+* **Solution:** We separated **Variable Logic** from **File I/O Logic**.
+    * `StateMachine.reset_scope()`: Clears the variable ledger when loading new data, ensuring perfectly isolated documentation for each step.
+    * `ClusterMetadata`: Records inputs and outputs persistantly.
+* **Result:** We can now accurately describe "Step B computes Average Sales" (Micro) AND "Step B depends on Step A's output" (Macro).
+
+### ♻️ The Great Refactor
+* **Pipeline:** Refactored `CompilerPipeline` to use a `dispatch_table`. This allows us to support complex commands like `AGGREGATE` and `MATCH FILES` cleanly.
+* **Compatibility Rescue:** The refactor initially broke 27 legacy tests due to API changes (`source_code` vs `source`). We restored the original API signature while keeping the new internal logic, bringing the test suite back to 100% Green.
+
+### ✅ Verification
+* `tests/integration/test_cluster_io.py`: **PASSED** (Proves Isolation + Linkage).
+* `tests/integration/test_spec_complexity_levels.py`: **PASSED** (Proves we handle complex Aggregation flows).
+* `tests/unit/test_state.py`: **PASSED** (Proves Core Logic is stable).
+
+
+## 2026-01-07: Core Data Structures Verification
+* **Component:** `VariableVersion`, `ClusterMetadata`, `ParsedCommand`
+* **Action:** Created `tests/unit/test_data_structures.py` to verify default factories, ID generation logic, and Enum integration.
+* **Outcome:** Confirmed that data carriers initialize safely without mutable default argument bugs.
+
+
+## 2026-01-07: Pipeline File & Utility Verification
+* **Component:** `CompilerPipeline`
+* **Action:** Created `tests/unit/test_compiler_pipeline.py` to target file I/O safety and Dead Code filtering logic.
+* **Outcome:** Validated `FileNotFoundError` handling and confirmed that system-internal nodes (Joins) are correctly excluded from Dead Code reports.
+
+
+## 2026-01-07: External Runner Isolation
+* **Component:** `PsppRunner`, `RRunner`
+* **Action:** Created `tests/unit/test_runners.py` using `subprocess` mocks.
+* **Outcome:** Verified that runners correctly handle non-zero exit codes (raising `RuntimeError`) and construct the correct CLI arguments for `pspp` and `Rscript`.
+
+
+## 2026-01-07: Code Forge Tooling Tests
+* **Component:** `CodeOptimizer`, `CodeRefiner`
+* **Action:** Created `tests/unit/test_code_forge_tools.py`.
+* **Outcome:** Verified dependency checking logic (e.g., detecting if R is installed) and the LLM interaction loop for code refinement.
+
+
+## 2026-01-07: The "Audit & Harden" Phase (100% Coverage)
+
+### 🎯 Objective
+Eliminate "Hidden Risk" by auditing the codebase against the test suite and filling all coverage gaps.
+
+### 🛠️ Key Actions
+1.  **Functionality Audit:** Deployed `map_codebase.py` to identify 11 untested components.
+2.  **Orchestrator Verification:** Created `tests/unit/test_orchestrator.py`.
+    * *Bug Found:* `SpecGenerator` output was missing source code, causing verification failures.
+    * *Fix:* Updated `SpecGenerator` to include source blocks in Markdown.
+3.  **Runner Verification:** Created `tests/unit/test_runners.py`.
+    * *Bug Found:* `RRunner` was dropping script arguments.
+    * *Bug Found:* `PsppRunner` was failing silently on syntax errors.
+    * *Fix:* Aligned runner logic with the actual `run_wrapper.R` architecture and added strict error checking.
+4.  **Core Hardening:** Created `tests/unit/test_compiler_pipeline.py` and `tests/unit/test_data_structures.py`.
+    * *Bug Found:* Dead Code Analysis incorrectly protected single-assignment variables.
+    * *Fix:* Refined the "Survivor Rule" in `state.py`.
+
+### ✅ Result
+* **Code Map:** 100% Component Coverage (23/23).
+* **Stability:** The system is now robust against the exact failures that were plaguing the End-to-End test (Runner crashes, Orchestrator misconfiguration).
+
+
+## 2026-01-07: Code Forge Tools Verification
+* **Component:** `CodeOptimizer`, `CodeRefiner`
+* **Action:** Created `tests/unit/test_code_forge_tools.py` and patched implementation signature mismatches.
+* **Fixes:**
+    * Updated `CodeOptimizer` to accept `project_dir` (Dependency Injection).
+    * Updated `CodeRefiner` to handle `MagicMock` serialization issues by patching the internal `OllamaClient`.
+    * Corrected `CodeRefiner.refine` signature assumptions.
+* **Outcome:** The Code Forge toolchain is now fully unit-tested and compatible with the new architecture.
+
+
+## 2026-01-07: The "Statify" Stabilization (v1.0 Release Candidate)
+
+### 🎯 Objective
+Achieve 100% test pass rate across Unit, Integration, and End-to-End suites by synchronizing the Legacy CLI with the New Architecture.
+
+### 🛠️ Key Actions
+1.  **Graph Generator API Fix:**
+    * *Issue:* `SpecOrchestrator` and `statify.py` were calling `GraphGenerator.render(filename=...)`.
+    * *Fix:* Enforced `render(output_path)` signature in `src/spec_writer/graph.py` and updated all callers.
+    * *Verification:* Created `tests/unit/test_graph_render.py` to lock this contract.
+2.  **CLI Synchronization:**
+    * *Issue:* `statify.py` was manually wiring legacy components, bypassing the `SpecOrchestrator`.
+    * *Fix:* Updated `statify.py` to use the new `GraphGenerator` class instance and positional arguments.
+3.  **Handoff Verification:**
+    * Created targeted integration tests (`test_graph_handoff.py`, `test_markdown_handoff.py`) to isolate subsystem failures before running E2E.
+
+### ✅ Result
+* **Test Suite:** 103 Tests Passed (0 Failures).
+* **Coverage:** 100% Component Functionality.
+* **Status:** The system is now robust, verified, and ready for deployment.

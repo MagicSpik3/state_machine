@@ -1,25 +1,19 @@
 from enum import Enum, auto
-import re
-import logging
-from typing import List, Optional
 from dataclasses import dataclass
-from spss_engine.state import StateMachine
-
-logger = logging.getLogger("Parser")
 
 class TokenType(Enum):
     ASSIGNMENT = auto()
     CONDITIONAL = auto()
     FILE_SAVE = auto()
     FILE_MATCH = auto()
-    AGGREGATE = auto()   # <--- NEW: Support for Aggregation
+    AGGREGATE = auto()
     CONTROL_FLOW = auto()
     UNKNOWN = auto()
 
 @dataclass
 class ParsedCommand:
     type: TokenType
-    original: str
+    raw: str  # RESTORED: Was 'original', reverted to 'raw'
 
 class SpssParser:
     def parse_command(self, command: str) -> ParsedCommand:
@@ -28,7 +22,7 @@ class SpssParser:
         if cmd_upper.startswith("MATCH FILES"):
             return ParsedCommand(TokenType.FILE_MATCH, command)
 
-        if cmd_upper.startswith("AGGREGATE"): # <--- NEW
+        if cmd_upper.startswith("AGGREGATE"):
             return ParsedCommand(TokenType.AGGREGATE, command)
 
         if any(cmd_upper.startswith(k) for k in ["COMPUTE", "STRING", "RECODE"]):
@@ -37,10 +31,10 @@ class SpssParser:
         if cmd_upper.startswith("IF"):
             return ParsedCommand(TokenType.CONDITIONAL, command)
             
-        if cmd_upper.startswith("SAVE OUTFILE") or cmd_upper.startswith("SAVE TRANSLATE"):
+        if cmd_upper.startswith("SAVE"):
             return ParsedCommand(TokenType.FILE_SAVE, command)
 
         if any(cmd_upper.startswith(k) for k in ["EXECUTE", "SORT CASES", "FILTER", "GET DATA", "SELECT IF"]):
             return ParsedCommand(TokenType.CONTROL_FLOW, command)
 
-        return ParsedCommand(TokenType.UNKNOWN, command)    
+        return ParsedCommand(TokenType.UNKNOWN, command)

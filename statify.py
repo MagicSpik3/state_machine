@@ -65,14 +65,17 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
     else:
         logger.info("  ℹ️  PSPP not found. Skipping verification.")
 
-    # 4. Visualization Phase
+    # 4. Visualization Phase (FIXED: New Instance-Based API)
     img_name = os.path.join(target_dir, f"{base_name}_flow")
     logger.info(f"  🎨 Rendering Graph to {img_name}.png...")
-    GraphGenerator.render(
-        pipeline.state_machine, 
-        filename=img_name, 
-        highlight_dead=dead_vars
-    )
+    
+    try:
+        # Instantiate the generator with the state machine
+        graph_gen = GraphGenerator(pipeline.state_machine)
+        # Call render with the positional output path
+        graph_gen.render(img_name)
+    except Exception as e:
+        logger.error(f"  ❌ Graph Generation Failed: {e}")
 
     # 5. Specification Phase
     logger.info(f"  🤖 Connecting to AI ({model})...")

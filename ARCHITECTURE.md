@@ -36,42 +36,41 @@
 
 ### 📄 `conductor.py`
 **Imports:**
-- `from collections import defaultdict`
-- `from collections import deque`
+- `from spss_engine.state import ClusterMetadata`
 - `from spss_engine.state import StateMachine`
+- `from spss_engine.state import VariableVersion`
 - `from typing import Dict`
 - `from typing import List`
+- `from typing import Optional`
 - `from typing import Set`
 
 **Definitions:**
 - 🏛️ **Class** `Conductor`
     - `def __init__(...)`
-    - `def _build_graph(...)`
     - `def identify_clusters(...)`
-    - `def _bfs_cluster(...)`
     - `def _topological_sort(...)`
+    - `def get_cluster_metadata(...)`
 
 ---
 
 ### 📄 `describer.py`
 **Imports:**
 - `from common.llm import OllamaClient`
-- `from common.prompts import DESCRIBE_NODE_PROMPT`
-- `from common.prompts import GENERATE_TITLE_PROMPT`
 - `from spec_writer.conductor import Conductor`
 - `from spss_engine.state import StateMachine`
 - `from spss_engine.state import VariableVersion`
 - `from typing import Dict`
 - `from typing import List`
+- `from typing import Optional`
 - `import logging`
 
 **Definitions:**
 - 🏛️ **Class** `SpecGenerator`
     - `def __init__(...)`
     - `def generate_report(...)`
-    - `def _find_version(...)`
+    - `def _find_node_by_id(...)`
+    - `def _get_node_source(...)`
     - `def _describe_node(...)`
-    - `def _generate_title(...)`
 
 ---
 
@@ -84,8 +83,29 @@
 
 **Definitions:**
 - 🏛️ **Class** `GraphGenerator`
+    - `def _sanitize_label(...)`
     - `def generate_dot(...)`
     - `def render(...)`
+
+---
+
+### 📄 `orchestrator.py`
+**Imports:**
+- `from common.llm import OllamaClient`
+- `from spec_writer.describer import SpecGenerator`
+- `from spec_writer.review import ProjectArchitect`
+- `from spss_engine.pipeline import CompilerPipeline`
+- `from typing import Dict`
+- `from typing import List`
+- `from typing import Optional`
+- `import logging`
+- `import os`
+
+**Definitions:**
+- 🏛️ **Class** `SpecOrchestrator`
+    - `def __init__(...)`
+    - `def ingest(...)`
+    - `def generate_comprehensive_spec(...)`
 
 ---
 
@@ -128,6 +148,9 @@
     - `def _transpile_node(...)`
     - `def _topological_sort(...)`
     - `def _analyze_contract(...)`
+    - `def _transpile_node(...)`
+    - `def _topological_sort(...)`
+    - `def _analyze_contract(...)`
 
 ---
 
@@ -167,7 +190,6 @@
 ### 📄 `rosetta.py`
 **Imports:**
 - `from typing import List`
-- `from typing import Tuple`
 - `import re`
 
 **Definitions:**
@@ -180,6 +202,7 @@
 ### 📄 `runner.py`
 **Imports:**
 - `from typing import Dict`
+- `from typing import List`
 - `from typing import Optional`
 - `import csv`
 - `import logging`
@@ -227,23 +250,15 @@
 
 ### 📄 `parser.py`
 **Imports:**
+- `from dataclasses import dataclass`
 - `from enum import Enum`
 - `from enum import auto`
-- `from spss_engine.state import StateMachine`
-- `from typing import List`
-- `import logging`
-- `import re`
 
 **Definitions:**
 - 🏛️ **Class** `TokenType`
-- 🏛️ **Class** `Parser`
-    - `def __init__(...)`
-    - `def parse(...)`
-    - `def _handle_compute(...)`
-    - `def _handle_if(...)`
-    - `def _handle_string(...)`
-    - `def _handle_match_files(...)`
-    - `def _extract_deps(...)`
+- 🏛️ **Class** `ParsedCommand`
+- 🏛️ **Class** `SpssParser`
+    - `def parse_command(...)`
 
 ---
 
@@ -255,15 +270,54 @@
 - `from spss_engine.parser import TokenType`
 - `from spss_engine.state import StateMachine`
 - `from spss_engine.state import VariableVersion`
+- `from typing import Callable`
+- `from typing import Dict`
 - `from typing import List`
 - `from typing import Optional`
 - `import os`
+- `import re`
 
 **Definitions:**
 - 🏛️ **Class** `CompilerPipeline`
     - `def __init__(...)`
     - `def process(...)`
     - `def _handle_assignment(...)`
+    - `def _handle_conditional(...)`
+    - `def _handle_file_match(...)`
+    - `def _handle_control_flow(...)`
+    - `def _handle_file_save(...)`
+    - `def _handle_aggregate(...)`
+    - `def analyze_dead_code(...)`
+    - `def process_file(...)`
+    - `def get_variable_version(...)`
+    - `def get_variable_history(...)`
+
+---
+
+### 📄 `previous_pipeline.py`
+**Imports:**
+- `from spss_engine.extractor import AssignmentExtractor`
+- `from spss_engine.lexer import SpssLexer`
+- `from spss_engine.parser import SpssParser`
+- `from spss_engine.parser import TokenType`
+- `from spss_engine.state import StateMachine`
+- `from spss_engine.state import VariableVersion`
+- `from typing import Callable`
+- `from typing import Dict`
+- `from typing import List`
+- `from typing import Optional`
+- `import os`
+- `import re`
+
+**Definitions:**
+- 🏛️ **Class** `CompilerPipeline`
+    - `def __init__(...)`
+    - `def process(...)`
+    - `def _handle_assignment(...)`
+    - `def _handle_conditional(...)`
+    - `def _handle_file_match(...)`
+    - `def _handle_control_flow(...)`
+    - `def _handle_aggregate(...)`
     - `def analyze_dead_code(...)`
     - `def process_file(...)`
     - `def get_variable_version(...)`
@@ -315,20 +369,23 @@
 - `from typing import Dict`
 - `from typing import List`
 - `from typing import Optional`
-- `from typing import Tuple`
+- `from typing import Set`
 
 **Definitions:**
 - 🏛️ **Class** `VariableVersion`
+    - `def id(...)`
+- 🏛️ **Class** `ClusterMetadata`
 - 🏛️ **Class** `StateMachine`
     - `def __init__(...)`
-    - `def _normalize(...)`
-    - `def get_current_version(...)`
     - `def get_history(...)`
+    - `def get_current_version(...)`
     - `def register_assignment(...)`
     - `def register_conditional(...)`
     - `def register_control_flow(...)`
-    - `def register_file_save(...)`
-    - `def register_file_match(...)`
     - `def find_dead_versions(...)`
+    - `def _get_current_cluster(...)`
+    - `def register_input_file(...)`
+    - `def register_output_file(...)`
+    - `def reset_scope(...)`
 
 ---

@@ -1,40 +1,32 @@
-import os
 import pytest
+import os
 from spss_engine.state import StateMachine
 from spec_writer.graph import GraphGenerator
 
-# Skip if graphviz is not installed to avoid breaking CI environments
-try:
-    import graphviz
-
-    HAS_GRAPHVIZ = True
-except ImportError:
-    HAS_GRAPHVIZ = False
-
-
-@pytest.mark.skipif(not HAS_GRAPHVIZ, reason="Graphviz library not installed")
 class TestVisualization:
-
+    
     def test_render_png_file(self, tmp_path):
         """
         Integration: Create a state, generate DOT, and render to PNG.
         """
         # 1. Setup State
         state = StateMachine()
-        state.register_assignment("Age", "COMPUTE Age = 25.")
-        state.register_assignment("Age", "IF (x) COMPUTE Age = 26.")
-
+        state.register_assignment("Age", "COMPUTE Age = 25.", dependencies=[])
+        state.register_assignment("Age", "IF (x) COMPUTE Age = 26.", dependencies=["AGE_0"])
+        
         # 2. Define Output Path in temp dir
-        output_file = tmp_path / "logic_flow"
-
-        # 3. Call the Render method (We need to implement this!)
-        output_path = GraphGenerator.render(
-            state, filename=str(output_file), format="png"
-        )
-
-        # 4. Verify the file exists
-        # Graphviz usually appends the extension, so logic_flow.png
-        expected_file = str(output_file) + ".png"
-
-        assert os.path.exists(expected_file)
-        assert os.path.getsize(expected_file) > 0
+        # Note: Graphviz appends the extension automatically, so we provide the base name
+        output_base = tmp_path / "logic_flow"
+        
+        # 3. Call the Render method
+        # FIX: Instantiate the class first
+        generator = GraphGenerator(state)
+        
+        # FIX: Call instance method with simple signature (output_path)
+        # format is hardcoded to 'png' in the current implementation
+        output_path = generator.render(str(output_base))
+        
+        # 4. Verify
+        # Graphviz returns the path to the generated file (with extension)
+        assert output_path.endswith(".png")
+        assert os.path.exists(output_path)
