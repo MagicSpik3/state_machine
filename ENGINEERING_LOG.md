@@ -151,3 +151,30 @@
 3.  **Integration Testing:** Added `test_refinement_flow.py` to verify the "Handshake" between the Generator and the AI service.
 4.  **Verification:** `demo_refine.py` proved that `qwen2.5-coder` can successfully refactor multi-line SPSS legacy date logic into clean `lubridate::make_date` calls.
 **Result:** System is now resilient to AI failures and capable of producing human-grade R code.
+
+
+## 2026-01-07: The Rosetta & Conductor Update
+
+### 🚀 Critical Fixes
+1.  **Fixed `RosettaStone` Recursion:**
+    * Problem: Simple regex replacements failed on nested functions like `DATE.MDY(TRUNC(x), ...)` and broke `AGE >= 18` into `AGE >== 18`.
+    * Solution: Implemented a recursive `_split_args` parser and Regex Lookbehind assertions. The translator now correctly handles deeply nested legacy syntax.
+
+2.  **Fixed `RRunner` Error Reporting:**
+    * Problem: The runner was swallowing R syntax errors, making debugging impossible.
+    * Solution: Updated the R wrapper to capture `stderr` and bubble "CRITICAL R ERROR" up to the Python exception handler.
+
+3.  **Sanitized Graph Visualization:**
+    * Problem: `MATCH FILES` commands containing `/` or quotes crashed Graphviz.
+    * Solution: Implemented robust label sanitization in `GraphGenerator`.
+
+### 🧠 Architectural Discovery: Scope Leakage
+* **Observation:** The generator produced R code that tried to calculate `min_age_n` using a raw variable `value`.
+* **Root Cause:** The legacy script (`example_pspp_final.sps`) reused the variable name `value` in a localized ETL step (loading `control_vars.csv`) before the main pipeline started. Our State Machine treated this as a global dependency.
+* **Validation:** Created `tests/integration/test_spec_structure.py`. This test successfully proved that the `Conductor` can distinguish between the **Control Vars Cluster** and the **Main Calculation Cluster**.
+* **Next Step:** Update `RGenerator` to respect these clusters, generating separate R functions (or pipelines) for each cluster to prevent variable leakage.
+
+### ✅ Test Coverage
+* `tests/integration/test_spec_structure.py`: PASSED (Proves we can segregate logic).
+* `tests/unit/test_rosetta.py`: PASSED (Proves syntax translation is robust).
+* `tests/unit/test_writer.py`: PASSED (Proves conditional logic generation).

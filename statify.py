@@ -4,31 +4,26 @@ import argparse
 import logging
 import shutil
 from typing import List
+from pathlib import Path
+
+# --- CORE COMPONENTS ---
 from spec_writer.review import ProjectArchitect
 from code_forge.refiner import CodeRefiner
 from code_forge.runner import RRunner
-
-# --- CODE FORGE (The Builder) ---
 from code_forge.generator import RGenerator
-
-# --- LEGACY CORE (The Engine) ---
 from spss_engine.pipeline import CompilerPipeline
 from spss_engine.repository import Repository
 from spss_engine.runner import PsppRunner
-
-# --- SPEC WRITER (The Documenter) ---
 from spec_writer.graph import GraphGenerator
 from spec_writer.describer import SpecGenerator
-from common.llm import OllamaClient # Correct Import
+from common.llm import OllamaClient
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%H:%M:%S')
 logger = logging.getLogger("Statify")
 
 def ensure_output_dir(base_output_dir: str, relative_path: str) -> str:
-    """
-    Creates the subdirectory structure in the output folder to match the source.
-    """
+    """Creates the subdirectory structure in the output folder."""
     rel_dir = os.path.dirname(relative_path)
     target_dir = os.path.join(base_output_dir, rel_dir)
     os.makedirs(target_dir, exist_ok=True)
@@ -47,7 +42,7 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
     with open(full_path, 'r', encoding='utf-8') as f:
         code = f.read()
 
-    # 1. Engine Phase
+    # 1. Engine Phase (Parsing)
     logger.info("  ⚙️  Compiling Logic Graph...")
     pipeline = CompilerPipeline()
     pipeline.process(code)
@@ -57,7 +52,7 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
     if dead_vars:
         logger.info(f"  🧹 Detected {len(dead_vars)} dead variable versions.")
 
-    # 3. Verification Phase (Ground Truth)
+    # 3. Verification Phase (Ground Truth Probe)
     runtime_values = {}
     if shutil.which("pspp"):
         logger.info("  🔬 Running Verification Probe (PSPP)...")
@@ -85,14 +80,13 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
     generator = SpecGenerator(pipeline.state_machine, client)
     
     logger.info("  📝 Writing Specification...")
-    # FIX: Captured into 'spec_content' so it is available for the Architect later
     spec_content = generator.generate_report(dead_ids=dead_vars, runtime_values=runtime_values)
     
     report_file = os.path.join(target_dir, f"{base_name}_spec.md")
     with open(report_file, "w") as f:
         f.write(spec_content)
 
-    # 6. Code Generation Phase
+    # 6. Code Generation & Verification Phase
     if generate_code:
         logger.info("  ⚙️  Generating R Code...")
         r_gen = RGenerator(pipeline.state_machine)
@@ -100,12 +94,15 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
         # A. Rough Draft
         r_code = r_gen.generate_script()
         
-        # B. AI Refinement (NEW)
-        if refine_mode: # We will pass this arg in
+        # B. AI Refinement
+        if refine_mode:
+            logger.info(f"  🧠 Refining code with qwen2.5-coder:latest...")
             refiner = CodeRefiner(model="qwen2.5-coder:latest")
-            r_code = refiner.refine(r_code)
+            refined = refiner.refine(r_code)
+            if refined:
+                r_code = refined
 
-        # C. Save
+        # C. Save the Code (Crucial step: Code exists now!)
         r_path = os.path.join(target_dir, f"{base_name}.R")
         with open(r_path, "w", encoding="utf-8") as f:
             f.write(r_code)
@@ -118,12 +115,18 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
             f.write(desc_content)
         logger.info(f"  📦 Saved Package Metadata: {desc_path}")
         
-        # 7. EQUIVALENCE CHECK
+        # 7. Equivalence Check (Run ONLY if we have ground truth)
         if runtime_values:
             logger.info("  ⚖️  Running Equivalence Check (Black Box vs White Box)...")
             
+            # Initialize Runner with the file we just saved
             r_runner = RRunner(r_path)
-            r_results = r_runner.run_and_capture()
+            
+            # Extract inputs to prevent "object not found" errors
+            all_vars = list(pipeline.state_machine.history_ledger.keys())
+            
+            # Run R script with dummy inputs
+            r_results = r_runner.run_and_capture(input_vars=all_vars)
             
             matches = 0
             mismatches = 0
@@ -156,25 +159,19 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
             else:
                 logger.warning("  ❓ No overlapping variables found to compare.")
 
-
-    # 8. ARCHITECTURAL REVIEW
-    if refine_mode: 
-        logger.info("  🏛️  Summoning the Architect...")
-        
-        # Read the artifacts we just generated
-        with open(r_path, 'r') as f:
-            final_r_code = f.read()
+        # 8. Architectural Review (Only if refining, as Architect needs the Refined code)
+        if refine_mode: 
+            logger.info("  🏛️  Summoning the Architect...")
             
-        # Spec content is now available from step 5
-        architect = ProjectArchitect(OllamaClient(model="mistral:instruct"))
-        review_report = architect.review(final_r_code, spec_content)
-        
-        # Save the Review
-        review_path = os.path.join(target_dir, f"{base_name}_REVIEW.md")
-        with open(review_path, 'w') as f:
-            f.write(review_report)
+            architect = ProjectArchitect(OllamaClient(model="mistral:instruct"))
+            logger.info("  🧐 The Architect is reviewing the project...")
+            review_report = architect.review(r_code, spec_content)
             
-        logger.info(f"  📝 Architectural Review Saved: {review_path}")
+            review_path = os.path.join(target_dir, f"{base_name}_REVIEW.md")
+            with open(review_path, 'w') as f:
+                f.write(review_report)
+                
+            logger.info(f"  📝 Architectural Review Saved: {review_path}")
 
 def process_directory(source_root: str, output_root: str, model: str, generate_code: bool, refine_mode: bool):
     logger.info(f"📂 Scanning Repository: {source_root}")

@@ -11,29 +11,28 @@ class TestRGeneratorJoins:
         R: left_join(benefit_rates, by='benefit_type')
         """
         state = StateMachine()
-        
-        # Simulate a variable (e.g., 'weekly_rate') that is associated with this Join command
         join_cmd = "MATCH FILES /FILE=* /TABLE='benefit_rates.sav' /BY benefit_type."
-        state.register_assignment("weekly_rate", join_cmd, dependencies=[])
+        
+        # Register as System Node
+        state.register_assignment("###SYS_JOIN_1###", join_cmd, dependencies=[])
         
         gen = RGenerator(state)
         code = gen.generate_script()
         
         assert "left_join(benefit_rates, by='benefit_type')" in code
+        assert "benefit_rates = NULL" in code 
 
     def test_duplicate_joins_skipped(self):
         """
-        If 5 variables come from the same JOIN, we should only write the left_join() line ONCE.
+        If the same JOIN appears multiple times, write it once.
         """
         state = StateMachine()
         join_cmd = "MATCH FILES /FILE=* /TABLE='benefit_rates.sav' /BY benefit_type."
         
-        # Two variables from same join
-        state.register_assignment("weekly_rate", join_cmd)
-        state.register_assignment("description", join_cmd)
+        state.register_assignment("###SYS_JOIN_1###", join_cmd, dependencies=[])
+        state.register_assignment("###SYS_JOIN_2###", join_cmd, dependencies=[])
         
         gen = RGenerator(state)
         code = gen.generate_script()
         
-        # We expect exactly one occurrence of left_join
         assert code.count("left_join") == 1

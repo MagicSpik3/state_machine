@@ -437,3 +437,27 @@ While flowcharts are often visualized as Trees (splitting infinitely), business 
 We are not building a translator; we are building a **Digital Archaeology Tool**. We rely on the simplicity and procedural nature of SPSS to brush away layers of dead logic, revealing the clean, deterministic skeleton of the business rules underneath.
 
 ---
+
+# 🗺️ State Machine Migration Engine
+
+> **Status:** Beta (Core Logic Verified)
+> **Latest Victory:** Automated translation of nested date logic (`DATE.MDY`) and discovery of implicit data streams (`MATCH FILES`).
+
+## 🏗️ Architecture
+We moved away from "Regex-based Transpilation" to a **State-Machine-Driven Architecture**. The system builds a dependency graph of the legacy logic before writing a single line of new code.
+
+### 1. The Core Engine (`src/spss_engine`)
+* **Lazy Parser:** Identifies command types (`COMPUTE`, `MATCH FILES`, `IF`) without executing them.
+* **State Machine:** The Single Source of Truth. It registers every variable version (`var_0`, `var_1`) and tracks dependencies.
+* **Conductor:** Analyzes the graph to identify "Logic Clusters" (separating ETL steps from Main Calculation steps).
+
+### 2. The Builder (`src/code_forge`)
+* **Generator:** Walks the State Machine to write modern R code (`dplyr`).
+* **Rosetta Stone:** A recursive translation layer that handles complex nested functions (e.g., `DATE.MDY(TRUNC(MOD(...)))` $\to$ `make_date(...)`).
+* **Runner:** Executes the generated R code to prove **Mathematical Equivalence** against the legacy system.
+
+### 3. The Scribe (`src/spec_writer`)
+* **Spec Generator:** Uses the `Conductor`'s clusters to write human-readable documentation, organizing spaghetti code into logical "Chapters".
+* **Architect:** An AI agent that reviews the generated Code and Spec for logic gaps and library misuse.
+
+---

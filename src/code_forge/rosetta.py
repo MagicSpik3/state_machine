@@ -1,11 +1,13 @@
 import re
-from typing import List, Tuple
+from typing import List
 
 class RosettaStone:
     """
     The Single Source of Truth for translating SPSS functions to R.
+    Handles nested expressions, argument swapping, and syntax mapping.
     """
     
+    # 1. Simple 1-to-1 replacements
     TRANSLATIONS = {
         "$SYSMIS": "NA",
         "TRUNC": "trunc",
@@ -13,17 +15,20 @@ class RosettaStone:
         "MIN": "pmin",
         "MEAN": "mean",
         "SUM": "sum",
-        "RTRIM": "str_trim",
-        "LTRIM": "str_trim",
+        "RTRIM": "trimws", # Use base R trimws
+        "LTRIM": "trimws",
         "CONCAT": "paste0",
-        "NUMBER": "as.numeric", # Fallback if regex fails
+        "ABS": "abs",
+        "SQRT": "sqrt",
+        "RND": "round",
+        "NUMBER": "as.numeric", # Fallback
     }
 
     @staticmethod
     def _split_args(expression: str) -> List[str]:
         """
         Splits a string by commas, but ignores commas inside parentheses.
-        Ex: "trunc(a,b), c" -> ["trunc(a,b)", "c"]
+        Crucial for nested functions like DATE.MDY(MOD(a,b), c, d).
         """
         args = []
         current_arg = []
@@ -49,53 +54,70 @@ class RosettaStone:
 
     @staticmethod
     def translate_expression(expression: str) -> str:
-        # 1. Constants
-        expression = expression.replace("$SYSMIS", "NA")
+        if not expression:
+            return "NA"
 
-        # 2. Complex Replacements (DATE.MDY)
-        date_pattern = re.compile(r"(?i)DATE\.MDY\s*\((.*)\)")
-        match = date_pattern.search(expression)
-        if match:
-            # ... (keep existing DATE logic) ...
-            inner_content = match.group(1)
-            args = RosettaStone._split_args(inner_content)
+        # 0. Basic Cleanup
+        expr = expression.replace("$SYSMIS", "NA")
+        
+        # 1. Handle Operators
+        # FIX: Use Regex to replace single '=' with '==' ONLY if not preceded/followed by other operators.
+        # This prevents >= becoming >==
+        # Lookbehind (?<!...) checks previous char is NOT <, >, !, or =
+        # Lookahead (?!=) checks next char is NOT =
+        expr = re.sub(r"(?<![<>!=])=(?!=)", "==", expr)
+
+        # 2. Handle DATE.MDY(m, d, y) -> make_date(y, m, d)
+        while "DATE.MDY" in expr.upper():
+            start_idx = expr.upper().find("DATE.MDY")
+            if start_idx == -1: break
+            
+            open_paren = expr.find("(", start_idx)
+            if open_paren == -1: break
+            
+            # Find balanced closing paren
+            count = 1
+            close_paren = -1
+            for i in range(open_paren + 1, len(expr)):
+                if expr[i] == '(': count += 1
+                elif expr[i] == ')': count -= 1
+                
+                if count == 0:
+                    close_paren = i
+                    break
+            
+            if close_paren == -1: break # Malformed
+            
+            # Extract content: "m, d, y"
+            full_match = expr[start_idx:close_paren+1]
+            content = expr[open_paren+1:close_paren]
+            
+            # Parse Args with nesting support
+            args = RosettaStone._split_args(content)
+            
             if len(args) == 3:
                 m, d, y = args
+                # Recursively translate arguments
                 m = RosettaStone.translate_expression(m)
                 d = RosettaStone.translate_expression(d)
                 y = RosettaStone.translate_expression(y)
-                original_span = match.group(0)
-                expression = expression.replace(original_span, f"make_date({y}, {m}, {d})")
+                
+                # Reconstruct as R function: make_date(y, m, d)
+                replacement = f"make_date({y}, {m}, {d})"
+                expr = expr.replace(full_match, replacement)
+            else:
+                # Fallback
+                expr = expr.replace("DATE.MDY", "make_date")
+                break
 
-        # 3. MOD(a, b) -> (a %% b)
-        if "MOD(" in expression.upper():
-            expression = re.sub(r"(?i)MOD\(([^,]+),([^)]+)\)", r"(\1 %%\2)", expression)
+        # 3. Handle NUMBER(x, fmt) -> as.numeric(x)
+        expr = re.sub(r"(?i)NUMBER\s*\(([^,]+)\s*,[^)]+\)", r"as.numeric(\1)", expr)
 
-        # 4. NUMBER(x, fmt) -> as.numeric(x)  <--- MOVED UP & FIXED
-        # Regex: NUMBER followed by paren, group 1 (var), comma, group 2 (format), close paren
-        # We replace it with "as.numeric(\1)"
-        if "NUMBER(" in expression.upper():
-             expression = re.sub(r"(?i)NUMBER\(([^,]+),\s*[^)]+\)", r"as.numeric(\1)", expression)
+        # 4. Handle MOD(a, b) -> (a %% b)
+        expr = re.sub(r"(?i)MOD\s*\((.+?),\s*(.+?)\)", r"(\1 %% \2)", expr)
 
-        # 5. Standard Function Mapping
-        # Replace FUNC( with new_func(
-        # We REMOVE 'NUMBER' from this list to prevent it from overwriting if the regex above missed something 
-        # (or we keep it as fallback, but the regex above usually handles it).
-        
-        # Explicitly define simple maps (excluding NUMBER to avoid conflict)
-        simple_maps = {
-            "TRUNC": "trunc",
-            "MAX": "pmax",
-            "MIN": "pmin",
-            "MEAN": "mean",
-            "SUM": "sum",
-            "RTRIM": "str_trim",
-            "LTRIM": "str_trim",
-            "CONCAT": "paste0"
-        }
-        
-        for spss_name, r_name in simple_maps.items():
-            expression = re.sub(rf"(?i)\b{spss_name}\(", f"{r_name}(", expression)
-            
-        return expression
+        # 5. Generic Dictionary Replacements
+        for spss_name, r_name in RosettaStone.TRANSLATIONS.items():
+            expr = re.sub(rf"(?i)\b{spss_name}\b", r_name, expr)
 
+        return expr

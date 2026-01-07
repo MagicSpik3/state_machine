@@ -1,16 +1,3 @@
-# 2. Dependency Edges (Data Flow) - NEW
-# We need to find the "Latest Version" of the dependent variable
-# that existed *before* this node.
-# This is complex. For now, let's just point to the *Current* version of that dependency
-# stored in the state machine?
-# Actually, for a visual graph, identifying the specific version node is hard without a lookup.
-#
-# SIMPLIFICATION: just try to link to the 'most recent' version of that dependency?
-# Or, better: StateMachine should allow us to look up "What was the version of X when this line ran?"
-#
-# For this step, let's just render the edge if we can guess the node ID.
-# We will simply look up the current max version of that dependency?
-# No, that's wrong (time travel).
 try:
     import graphviz
 except ImportError:
@@ -24,6 +11,21 @@ class GraphGenerator:
     Converts the StateMachine's history ledger into a DOT (Graphviz) string
     and handles image rendering.
     """
+
+    @staticmethod
+    def _sanitize_label(text: str) -> str:
+        """
+        Escapes characters that break Graphviz DOT string literals.
+        """
+        if not text:
+            return ""
+        # 1. Escape backslashes first (so we don't double-escape later)
+        text = text.replace("\\", "\\\\")
+        # 2. Escape double quotes
+        text = text.replace('"', '\\"')
+        # 3. Collapse real newlines into literal "\n" characters
+        text = text.replace("\n", "\\n")
+        return text
 
     @staticmethod
     def generate_dot(
@@ -43,7 +45,9 @@ class GraphGenerator:
 
             for version in history:
                 node_id = version.id
-                clean_source = version.source.replace('"', "'")
+                
+                # FIX: Use robust sanitization instead of naive replace
+                clean_source = GraphGenerator._sanitize_label(version.source)
 
                 # Determine Style
                 style_attr = ""
@@ -92,6 +96,11 @@ class GraphGenerator:
         src = graphviz.Source(dot_source)
 
         # render(filename, cleanup=True) will create filename.png and remove the temp .dot file
-        output_path = src.render(filename=filename, format=format, cleanup=True)
-
-        return output_path
+        # We catch exceptions here to provide better error messages
+        try:
+            output_path = src.render(filename=filename, format=format, cleanup=True)
+            return output_path
+        except Exception as e:
+            # If rendering fails, dump the source for debugging
+            print(f"DEBUG: Failed DOT Source:\n{dot_source}")
+            raise e

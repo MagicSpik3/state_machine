@@ -66,19 +66,12 @@
 - `import logging`
 
 **Definitions:**
-- 🏛️ **Class** `LLMClient`
-    - `def describe_node(...)`
-    - `def generate_title(...)`
-- 🏛️ **Class** `MockLLM`
-    - `def describe_node(...)`
-    - `def generate_title(...)`
 - 🏛️ **Class** `SpecGenerator`
     - `def __init__(...)`
-    - `def _generate_title(...)`
-    - `def _describe_node(...)`
-    - `def _generate_title(...)`
     - `def generate_report(...)`
     - `def _find_version(...)`
+    - `def _describe_node(...)`
+    - `def _generate_title(...)`
 
 ---
 
@@ -95,6 +88,22 @@
     - `def render(...)`
 
 ---
+
+### 📄 `review.py`
+**Imports:**
+- `from common.llm import OllamaClient`
+- `from typing import Dict`
+- `from typing import List`
+- `import logging`
+- `import re`
+
+**Definitions:**
+- 🏛️ **Class** `ProjectArchitect`
+    - `def __init__(...)`
+    - `def review(...)`
+    - `def _summarize_spec(...)`
+
+---
 ## 📦 Package: `src/code_forge`
 
 ### 📄 `__init__.py`
@@ -106,7 +115,6 @@
 - `from code_forge.rosetta import RosettaStone`
 - `from spss_engine.state import StateMachine`
 - `from spss_engine.state import VariableVersion`
-- `from typing import Dict`
 - `from typing import List`
 - `from typing import Set`
 - `import re`
@@ -115,10 +123,11 @@
 - 🏛️ **Class** `RGenerator`
     - `def __init__(...)`
     - `def generate_description(...)`
+    - `def _get_join_blocks(...)`
     - `def generate_script(...)`
-    - `def _analyze_contract(...)`
-    - `def _topological_sort(...)`
     - `def _transpile_node(...)`
+    - `def _topological_sort(...)`
+    - `def _analyze_contract(...)`
 
 ---
 
@@ -218,17 +227,23 @@
 
 ### 📄 `parser.py`
 **Imports:**
-- `from dataclasses import dataclass`
 - `from enum import Enum`
 - `from enum import auto`
+- `from spss_engine.state import StateMachine`
+- `from typing import List`
+- `import logging`
 - `import re`
 
 **Definitions:**
 - 🏛️ **Class** `TokenType`
-- 🏛️ **Class** `ParsedStatement`
-- 🏛️ **Class** `SpssParser`
+- 🏛️ **Class** `Parser`
     - `def __init__(...)`
-    - `def parse_command(...)`
+    - `def parse(...)`
+    - `def _handle_compute(...)`
+    - `def _handle_if(...)`
+    - `def _handle_string(...)`
+    - `def _handle_match_files(...)`
+    - `def _extract_deps(...)`
 
 ---
 
@@ -243,7 +258,6 @@
 - `from typing import List`
 - `from typing import Optional`
 - `import os`
-- `import re`
 
 **Definitions:**
 - 🏛️ **Class** `CompilerPipeline`

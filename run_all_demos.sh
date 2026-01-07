@@ -28,14 +28,19 @@ echo "✅ Payroll Simulation Passed"
 # PYTHONPATH=src python demo_ollama.py
 
 echo ""
-echo "[4/5] Running Statify (Self-Test on Payroll)..."
-# We assume payroll.spss exists in the root or legacy_repo
-if [ -f "legacy_repo/payroll.spss" ]; then
-    PYTHONPATH=src python statify.py legacy_repo/ --output docs/
+echo "[4/5] Running Statify (Full Pipeline)..."
+# OLD: PYTHONPATH=src python statify.py legacy_repo --output docs
+# NEW: Added --code and --refine to trigger the Generator and the Architect
+PYTHONPATH=src python statify.py legacy_repo --output docs --code --refine
+
+if [ $? -eq 0 ]; then
     echo "✅ Statify Run Passed"
 else
-    echo "⚠️  Skipping Statify (legacy_repo/payroll.spss not found)"
+    echo "❌ Statify Run Failed"
+    exit 1
 fi
+
+
 
 echo ""
 echo "========================================"

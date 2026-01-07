@@ -1,12 +1,4 @@
 Package: payroll
-Title: Converted Legacy Logic
+Title: Auto-Generated Logic
 Version: 0.1.0
-Authors@R: person('Statify', 'Bot', email='bot@example.com', role = c('aut', 'cre'))
-Description: Auto-generated logic pipeline derived from legacy SPSS source code.
-Imports:
-    dplyr,
-    readr,
-    lubridate
-Encoding: UTF-8
-LazyData: true
-RoxygenNote: 7.2.3
+Imports: dplyr, readr, lubridate, haven
