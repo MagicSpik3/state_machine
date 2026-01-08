@@ -4,6 +4,7 @@
 
 Statify is an intelligent transpiler pipeline that ingests legacy SPSS syntax files (`.sps`), analyzes their logic flow, verifies their behavior against ground truth data (using PSPP), generates human-readable specifications (Markdown), and transpiles them into modern, optimized R packages.
 
+
 ## 🌟 Key Features
 
 * **Logic Extraction:** Parses SPSS syntax into a semantic State Machine (Graph).
