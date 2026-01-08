@@ -9,11 +9,11 @@ from pathlib import Path
 # --- CORE COMPONENTS ---
 from spec_writer.review import ProjectArchitect
 from code_forge.refiner import CodeRefiner
-from code_forge.runner import RRunner
+from code_forge.R_runner import RRunner
 from code_forge.generator import RGenerator
 from spss_engine.pipeline import CompilerPipeline
 from spss_engine.repository import Repository
-from spss_engine.runner import PsppRunner
+from spss_engine.spss_runner import PsppRunner
 from spec_writer.graph import GraphGenerator
 from spec_writer.describer import SpecGenerator
 from common.llm import OllamaClient

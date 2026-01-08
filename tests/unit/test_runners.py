@@ -2,8 +2,8 @@ import pytest
 import os
 import subprocess
 from unittest.mock import patch, MagicMock
-from spss_engine.runner import PsppRunner
-from code_forge.runner import RRunner
+from spss_engine.spss_runner import PsppRunner
+from code_forge.R_runner import RRunner
 
 class TestRunners:
     """
