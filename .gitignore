@@ -1,5 +1,5 @@
 my_documentation/
-
+*.odt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
