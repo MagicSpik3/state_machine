@@ -1,6 +1,7 @@
 # Statify 🤖📊
 
 
+
 > **Turn Legacy SPSS Code into Modern Documentation & R Packages.**
 
 Statify is an intelligent transpiler pipeline that ingests legacy SPSS syntax files (`.sps`), analyzes their logic flow, verifies their behavior against ground truth data (using PSPP), generates human-readable specifications (Markdown), and transpiles them into modern, optimized R packages.
