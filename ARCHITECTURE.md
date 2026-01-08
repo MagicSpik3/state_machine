@@ -77,12 +77,16 @@
 ### 📄 `graph.py`
 **Imports:**
 - `from spss_engine.state import StateMachine`
+- `from spss_engine.state import VariableVersion`
 - `from typing import List`
 - `from typing import Optional`
 - `import graphviz`
+- `import logging`
+- `import os`
 
 **Definitions:**
 - 🏛️ **Class** `GraphGenerator`
+    - `def __init__(...)`
     - `def _sanitize_label(...)`
     - `def generate_dot(...)`
     - `def render(...)`
@@ -93,6 +97,7 @@
 **Imports:**
 - `from common.llm import OllamaClient`
 - `from spec_writer.describer import SpecGenerator`
+- `from spec_writer.graph import GraphGenerator`
 - `from spec_writer.review import ProjectArchitect`
 - `from spss_engine.pipeline import CompilerPipeline`
 - `from typing import Dict`
@@ -235,6 +240,24 @@
 
 ---
 
+### 📄 `inspector.py`
+**Imports:**
+- `from spss_engine.lexer import SpssLexer`
+- `from spss_engine.parser import SpssParser`
+- `from spss_engine.parser import TokenType`
+- `from typing import List`
+- `from typing import Tuple`
+- `import logging`
+- `import re`
+
+**Definitions:**
+- 🏛️ **Class** `SourceInspector`
+    - `def __init__(...)`
+    - `def scan(...)`
+    - `def _extract_filename(...)`
+
+---
+
 ### 📄 `lexer.py`
 **Imports:**
 - `from typing import List`
@@ -243,6 +266,7 @@
 **Definitions:**
 - 🏛️ **Class** `SpssLexer`
     - `def __init__(...)`
+    - `def split_commands(...)`
     - `def get_commands(...)`
     - `def normalize_command(...)`
 
@@ -344,7 +368,7 @@
 
 ---
 
-### 📄 `runner.py`
+### 📄 `spss_runner.py`
 **Imports:**
 - `from typing import Dict`
 - `from typing import List`

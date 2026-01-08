@@ -276,3 +276,25 @@ Achieve 100% test pass rate across Unit, Integration, and End-to-End suites by s
 * **Test Suite:** 103 Tests Passed (0 Failures).
 * **Coverage:** 100% Component Functionality.
 * **Status:** The system is now robust, verified, and ready for deployment.
+
+
+## 2026-01-08: Static Analysis Infrastructure (Feature Branch)
+
+### 🎯 Objective
+Enable the pipeline to automatically detect input CSVs and output "Gold Standard" artifacts to support the R Verification Bridge.
+
+### 🛠️ Changes
+1.  **New Component (`SourceInspector`):**
+    * Implemented a two-pass analyzer: Semantic Classification via `SpssParser` -> Argument Extraction via Regex.
+    * Avoids false positives from comments (unlike simple grep).
+    * Supports `FILE` and `OUTFILE` arguments with optional leading slashes.
+2.  **Parser Refactor:**
+    * Promoted `FILE_READ` (GET DATA, GET FILE) and `FILE_SAVE` (SAVE TRANSLATE) to first-class `TokenType` citizens.
+3.  **Lexer Modernization:**
+    * Refactored `SpssLexer` to be stateless, allowing reusable instantiation by the Inspector.
+4.  **Verification:**
+    * Created `tests/unit/test_inspector.py` covering inputs, outputs (Gold Standard), and comment filtering.
+
+### ✅ Status
+* `tests/unit/test_inspector.py`: **PASS**
+* Ready for integration into `Statify.py` and `RRunner`.

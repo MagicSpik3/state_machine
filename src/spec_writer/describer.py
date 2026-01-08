@@ -1,80 +1,89 @@
-from typing import Dict, List, Optional
-import logging
-from common.llm import OllamaClient
-from spss_engine.state import StateMachine, VariableVersion
-from spec_writer.conductor import Conductor
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
 
-GENERATE_TITLE_PROMPT = "Generate a short, business-friendly title for this logic cluster. Context: {context}"
-DESCRIBE_NODE_PROMPT = "Explain the business logic of this SPSS command in plain English. Code: {code}"
+@dataclass(frozen=True)
+class VariableVersion:
+    name: str
+    version: int
+    
+    @property
+    def id(self) -> str:
+        return f"{self.name}_{self.version}"
 
-logger = logging.getLogger("SpecGenerator")
+@dataclass
+class ClusterMetadata:
+    id: str
+    nodes: List[str]
+    description: str = "Logic Sequence"
 
-class SpecGenerator:
-    def __init__(self, state_machine: StateMachine, llm_client: OllamaClient):
-        self.state_machine = state_machine
-        self.llm_client = llm_client
-        self.conductor = Conductor(state_machine)
+class StateMachine:
+    """
+    Manages the lifecycle of variables and the logic graph.
+    """
+    def __init__(self):
+        self.variables: Dict[str, int] = {}  # name -> current_version
+        self.graph = nx.DiGraph()
+        self.scope_stack: List[Set[str]] = [set()]
+        
+        # Track cluster membership
+        self.clusters: Dict[str, List[str]] = {} 
 
-    def generate_report(self, dead_ids: List[str] = None, runtime_values: Dict[str, str] = None) -> str:
-        if dead_ids is None: dead_ids = []
-        if runtime_values is None: runtime_values = {}
+    def get_current_version(self, var_name: str) -> VariableVersion:
+        """Returns the latest version of a variable."""
+        version = self.variables.get(var_name, 0)
+        return VariableVersion(var_name, version)
 
-        clusters = self.conductor.identify_clusters()
-        report_parts = ["# Business Logic Specification", ""]
+    # --- MISSING METHOD FIX ---
+    def get_var_by_id(self, node_id: str) -> VariableVersion:
+        """
+        Retrieves the VariableVersion object associated with a graph node.
+        """
+        if node_id not in self.graph.nodes:
+             # Fallback for error handling or untracked nodes
+             name = node_id.split('_')[0]
+             return VariableVersion(name, 0)
+             
+        node_data = self.graph.nodes[node_id]
+        # We expect the 'variable' key to hold the VariableVersion object
+        # If not found, reconstruct it from ID
+        if 'variable' in node_data:
+            return node_data['variable']
+        
+        # Fallback reconstruction
+        parts = node_id.rsplit('_', 1)
+        name = parts[0]
+        version = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+        return VariableVersion(name, version)
+    # --------------------------
 
-        for i, cluster_node_ids in enumerate(clusters):
-            if not cluster_node_ids:
-                continue
-
-            chapter_num = i + 1
+    def register_assignment(self, var_name: str, source_code: str, dependencies: List[str] = None):
+        if dependencies is None:
+            dependencies = []
             
-            # 1. Generate Chapter Title
-            context_nodes = cluster_node_ids[:5] 
-            context_str = " ".join([self._get_node_source(nid) for nid in context_nodes])
-            
-            title_prompt = GENERATE_TITLE_PROMPT.format(context=context_str)
-            try:
-                chapter_title = self.llm_client.generate(title_prompt).strip()
-            except Exception:
-                chapter_title = "Logic Cluster"
-
-            if not chapter_title or "Generated" in chapter_title: 
-                 chapter_title = "Logic Cluster"
-
-            report_parts.append(f"## Chapter {chapter_num}: {chapter_title}")
-            
-            # 2. Describe Nodes
-            sorted_ids = self.conductor._topological_sort(cluster_node_ids)
-            
-            for node_id in sorted_ids:
-                if node_id in dead_ids: continue
+        # 1. Create new version
+        current_ver = self.variables.get(var_name, 0)
+        new_ver = current_ver + 1
+        self.variables[var_name] = new_ver
+        
+        new_var = VariableVersion(var_name, new_ver)
+        
+        # 2. Add to Graph
+        self.graph.add_node(
+            new_var.id, 
+            type="assignment", 
+            source=source_code,
+            variable=new_var,  # Storing the object here
+            cluster=self._get_current_cluster()
+        )
+        
+        # 3. Add Edges (Dependencies)
+        for dep_name in dependencies:
+            dep_ver = self.get_current_version(dep_name)
+            if dep_ver.id in self.graph.nodes:
+                self.graph.add_edge(dep_ver.id, new_var.id)
                 
-                node = self._find_node_by_id(node_id)
-                if not node: continue
+        return new_var
 
-                try:
-                    description = self._describe_node(node)
-                except Exception:
-                    description = "Logic description unavailable."
-
-                report_parts.append(f"* **{node.id}**: {description}")
-                # FIX: Add Source Code to output to pass verification tests
-                report_parts.append(f"  > `{node.source.strip()}`")
-
-            report_parts.append("")
-
-        return "\n".join(report_parts)
-
-    def _find_node_by_id(self, node_id: str) -> Optional[VariableVersion]:
-        for node in self.state_machine.nodes:
-            if node.id == node_id:
-                return node
-        return None
-
-    def _get_node_source(self, node_id: str) -> str:
-        node = self._find_node_by_id(node_id)
-        return node.source if node else ""
-
-    def _describe_node(self, node: VariableVersion) -> str:
-        prompt = DESCRIBE_NODE_PROMPT.format(code=node.source)
-        return self.llm_client.generate(prompt).strip()
+    def _get_current_cluster(self) -> str:
+        # Simplified clustering logic placeholder
+        return "default"

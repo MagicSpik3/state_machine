@@ -2,7 +2,7 @@ import pytest
 import shutil
 import os
 import textwrap
-from spss_engine.runner import PsppRunner
+from spss_engine.spss_runner import PsppRunner
 
 pspp_installed = shutil.which("pspp") is not None
 
