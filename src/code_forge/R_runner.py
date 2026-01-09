@@ -1,140 +1,104 @@
-import os
-import csv
 import subprocess
+import os
+import json
 import logging
-import pandas as pd
-from typing import Dict, Optional, List, Set
-from spss_engine.state import StateMachine
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger("RRunner")
 
 class RRunner:
-    """
-    Executes the generated R code to verify it produces the same numbers as SPSS.
-    """
-    def __init__(self, r_script_path: str, state_machine: Optional[StateMachine] = None):
-        self.script_path = os.path.abspath(r_script_path)
-        self.work_dir = os.path.dirname(self.script_path)
-        self.state_machine = state_machine
-        
-    def _discover_inputs(self) -> List[str]:
+    def __init__(self, script_path: str, state_machine=None):
+        # We accept state_machine for compatibility with the caller, 
+        # but we don't need it anymore because we trust the SourceInspector.
+        self.script_path = script_path
+        self.work_dir = os.path.dirname(script_path)
+
+    def run_and_capture(self, data_file: Optional[str] = None) -> Dict[str, Any]:
         """
-        Scans the State Machine to find variables that are USED but not DEFINED.
+        Executes the R script using the provided data file.
         """
-        if not self.state_machine:
-            logger.debug("⚠️ No StateMachine provided for input discovery.")
-            return []
+        if not data_file:
+            logger.warning("RRunner skipped: No data file provided for equivalence check.")
+            return {}
+
+        wrapper_path = os.path.join(self.work_dir, "wrapper.R")
+        output_json = os.path.join(self.work_dir, "r_output.json")
+        
+        # 1. Generate the harness script
+        wrapper_code = self._generate_wrapper(output_json, data_file)
+        with open(wrapper_path, "w") as f:
+            f.write(wrapper_code)
+
+        # 2. Execute R
+        cmd = ["Rscript", "wrapper.R"]
+        try:
+            result = subprocess.run(
+                cmd, 
+                cwd=self.work_dir, 
+                capture_output=True, 
+                text=True, 
+                timeout=30
+            )
             
-        # 1. Gather all variables defined in this script (The "Nodes")
-        # We assume node names are UPPERCASE in the backend
-        defined_vars = {node.name.upper() for node in self.state_machine.nodes}
-        
-        # 2. Gather all variables required by those nodes (The "Dependencies")
-        required_vars = set()
-        
-        for node in self.state_machine.nodes:
-            for dep in node.dependencies:
-                # Handle both object and potentially string legacy refs
-                d_name = dep.name if hasattr(dep, 'name') else str(dep)
-                # Clean up name (remove version suffixes if any exist in loose references)
-                d_name = d_name.split('_')[0].upper()
-                required_vars.add(d_name)
+            if result.returncode != 0:
+                logger.error(f"R Execution Failed:\n{result.stderr}")
+                return {}
 
-        # 3. Calculate the difference: Required - Defined = Inputs
-        missing_vars = list(required_vars - defined_vars)
-        
-        # 🟢 CRITICAL FIX: Coerce to lowercase.
-        # The RGenerator outputs lowercase variables (e.g., 'age', 'income').
-        # The dataframe must match this case.
-        missing_vars_lower = [v.lower() for v in missing_vars]
-        
-        logger.debug(f"🔎 Input Discovery:")
-        logger.debug(f"   Defined: {defined_vars}")
-        logger.debug(f"   Required: {required_vars}")
-        logger.debug(f"   Detected Inputs: {missing_vars_lower}")
-        
-        return missing_vars_lower
+            # 3. Read JSON Output
+            if os.path.exists(output_json):
+                with open(output_json, "r") as f:
+                    return json.load(f)
+            else:
+                logger.warning("R ran but produced no JSON output.")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"R Runner failed: {e}")
+            return {}
+        finally:
+            # Cleanup wrapper to keep the output folder clean
+            if os.path.exists(wrapper_path): os.remove(wrapper_path)
+            if os.path.exists(output_json): os.remove(output_json)
 
-    def run_and_capture(self, input_vars: List[str] = None) -> Dict[str, float]:
-        wrapper_path = os.path.join(self.work_dir, "run_wrapper.R")
-        output_csv = os.path.join(self.work_dir, "r_output.csv")
+    def _generate_wrapper(self, output_path: str, data_file: str) -> str:
+        """
+        Generates simple, robust R code to load the data and run the pipeline.
+        """
+        script_name = os.path.basename(self.script_path)
         
-        # 🟢 Auto-discover inputs if not provided
-        if input_vars is None:
-            input_vars = self._discover_inputs()
+        # Determine strict loader based on extension
+        if data_file.lower().endswith(".sav"):
+            load_cmd = f'df <- read_sav("{data_file}")'
         else:
-            # Ensure manually passed vars are also lowercase
-            input_vars = [v.lower() for v in input_vars]
+            # Default to CSV for everything else
+            load_cmd = f'df <- read_csv("{data_file}", show_col_types = FALSE)'
 
-        # Initialize dummy columns (Default to 1 to avoid DivisionByZero/NA errors)
-        cols_init = ""
-        if input_vars:
-            cols = [f'{var} = 1' for var in input_vars] 
-            cols_init = ", ".join(cols)
-        
-        # Always provide a fallback ID
-        if not cols_init:
-            cols_init = "id = 1"
-        else:
-            cols_init += ", id = 1"
-            
-        r_wrapper = f"""
+        return f"""
         library(dplyr)
         library(readr)
         library(lubridate)
         library(haven)
+        library(jsonlite)
 
-        source("{os.path.basename(self.script_path)}")
-        
-        # Create dummy DF with discovered inputs
-        df <- data.frame({cols_init})
-        
-        # Run safely
+        # 1. Source the Logic
+        source("{script_name}")
+
         tryCatch({{
+            # 2. Load Real Data (Found by Inspector)
+            {load_cmd}
+
+            # 3. Run Pipeline
+            # We assume the function is named 'logic_pipeline'
             result <- logic_pipeline(df)
-            write.csv(result, "{output_csv}", row.names = FALSE)
+
+            # 4. Serialize First Row for Comparison
+            output_list <- as.list(result[1, ])
+            json_out <- toJSON(output_list, auto_unbox = TRUE)
+            write(json_out, "{output_path}")
+
         }}, error = function(e) {{
-            message("CRITICAL R ERROR: ", e$message)
+            message("CRITICAL R ERROR:")
+            message(e$message)
             quit(status = 1)
         }})
         """
-        
-        with open(wrapper_path, "w") as f:
-            f.write(r_wrapper)
-            
-        try:
-            # Run Rscript. We use capture_output=True to keep stdout clean unless verbose
-            subprocess.run(
-                ["Rscript", wrapper_path], 
-                check=True, 
-                cwd=self.work_dir,
-                capture_output=True,
-                text=True
-            )
-        except subprocess.CalledProcessError as e:
-            # Only log error if it actually failed
-            logger.error(f"R Execution Failed:\n{e.stderr}")
-            return {}
-            
-        if not os.path.exists(output_csv):
-            return {}
-            
-        return self._read_first_row(output_csv)
-
-    def _read_first_row(self, csv_path: str) -> Dict[str, float]:
-        results = {}
-        try:
-            df = pd.read_csv(csv_path)
-            if not df.empty:
-                row = df.iloc[-1]
-                for col in df.columns:
-                    key = col.upper() 
-                    try:
-                        val = float(row[col])
-                        results[key] = val
-                    except (ValueError, TypeError):
-                        pass 
-        except Exception as e:
-            logger.error(f"Failed to read R output: {e}")
-            
-        return results
