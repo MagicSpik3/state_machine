@@ -46,3 +46,26 @@ class TestSourceInspector:
         
         assert "real_data.csv" in inputs
         assert "ignore_me.csv" not in inputs
+
+
+    def test_finds_match_files_table(self):
+        """
+        Verify that MATCH FILES /TABLE='lookup.sav' is detected as an input.
+        """
+        code = "MATCH FILES /FILE=* /TABLE='lookup.sav' /BY id."
+        
+        inspector = SourceInspector()
+        inputs, outputs = inspector.scan(code)
+        
+        assert "lookup.sav" in inputs
+        assert len(outputs) == 0
+
+    def test_finds_multiple_tables(self):
+        """Verify it catches multiple TABLE args."""
+        code = "MATCH FILES /TABLE='A.sav' /TABLE='B.sav' /BY id."
+        
+        inspector = SourceInspector()
+        inputs, _ = inspector.scan(code)
+        
+        assert "A.sav" in inputs
+        assert "B.sav" in inputs        

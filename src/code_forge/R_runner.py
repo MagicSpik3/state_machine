@@ -8,8 +8,8 @@ logger = logging.getLogger("RRunner")
 
 class RRunner:
     def __init__(self, script_path: str, state_machine=None):
-        # We accept state_machine for compatibility with the caller, 
-        # but we don't need it anymore because we trust the SourceInspector.
+        # We accept state_machine to keep the API consistent, 
+        # even if we don't strictly use it for mocking anymore.
         self.script_path = script_path
         self.work_dir = os.path.dirname(script_path)
 
@@ -62,15 +62,17 @@ class RRunner:
 
     def _generate_wrapper(self, output_path: str, data_file: str) -> str:
         """
-        Generates simple, robust R code to load the data and run the pipeline.
+        Generates dynamic R code to load the data and run the pipeline.
+        We use 'readr' because it is smarter at auto-detecting types/delimiters 
+        than base R, avoiding the need for strict schema hardcoding for now.
         """
         script_name = os.path.basename(self.script_path)
         
-        # Determine strict loader based on extension
+        # Determine loader based on extension
+        # We rely on read_csv's auto-detection to handle delimiters/quotes
         if data_file.lower().endswith(".sav"):
             load_cmd = f'df <- read_sav("{data_file}")'
         else:
-            # Default to CSV for everything else
             load_cmd = f'df <- read_csv("{data_file}", show_col_types = FALSE)'
 
         return f"""
