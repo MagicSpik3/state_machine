@@ -58,6 +58,27 @@ class RGenerator:
         
         return "\n".join(self.script_lines)
 
+    # ... inside RGenerator class ...
+
+    def generate_loader_snippet(self, event: FileReadEvent) -> str:
+        """
+        Public method to generate just the data loading block.
+        Used by RRunner to ensure test execution matches production logic.
+        """
+        # Temporarily hijack self.script_lines to capture just this block
+        original_lines = self.script_lines
+        self.script_lines = []
+        
+        self._generate_loader_block(event)
+        
+        snippet = "\n".join(self.script_lines)
+        
+        # Restore state
+        self.script_lines = original_lines
+        return snippet
+
+
+
     def _transpile_node(self, node: VariableVersion) -> str:
         if not hasattr(node, 'source'):
              return f"# Error: Node {node.name} missing source code"

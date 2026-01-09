@@ -8,24 +8,24 @@ logger = logging.getLogger("RRunner")
 
 class RRunner:
     def __init__(self, script_path: str, state_machine=None):
-        # We accept state_machine to keep the API consistent, 
-        # even if we don't strictly use it for mocking anymore.
         self.script_path = script_path
         self.work_dir = os.path.dirname(script_path)
 
-    def run_and_capture(self, data_file: Optional[str] = None) -> Dict[str, Any]:
+    def run_and_capture(self, data_file: Optional[str] = None, loader_code: Optional[str] = None) -> Dict[str, Any]:
         """
-        Executes the R script using the provided data file.
+        Executes the R script.
+        :param data_file: Path to input file (for legacy fallback).
+        :param loader_code: Exact R code to load the dataframe (Preferred).
         """
-        if not data_file:
-            logger.warning("RRunner skipped: No data file provided for equivalence check.")
+        if not data_file and not loader_code:
+            logger.warning("RRunner skipped: No data file or loader code provided.")
             return {}
 
         wrapper_path = os.path.join(self.work_dir, "wrapper.R")
         output_json = os.path.join(self.work_dir, "r_output.json")
         
         # 1. Generate the harness script
-        wrapper_code = self._generate_wrapper(output_json, data_file)
+        wrapper_code = self._generate_wrapper(output_json, data_file, loader_code)
         with open(wrapper_path, "w") as f:
             f.write(wrapper_code)
 
@@ -56,24 +56,27 @@ class RRunner:
             logger.error(f"R Runner failed: {e}")
             return {}
         finally:
-            # Cleanup wrapper to keep the output folder clean
             if os.path.exists(wrapper_path): os.remove(wrapper_path)
             if os.path.exists(output_json): os.remove(output_json)
 
-    def _generate_wrapper(self, output_path: str, data_file: str) -> str:
+    def _generate_wrapper(self, output_path: str, data_file: str, loader_code: str) -> str:
         """
-        Generates dynamic R code to load the data and run the pipeline.
-        We use 'readr' because it is smarter at auto-detecting types/delimiters 
-        than base R, avoiding the need for strict schema hardcoding for now.
+        Generates dynamic R code to load the REAL data and run the pipeline.
         """
         script_name = os.path.basename(self.script_path)
         
-        # Determine loader based on extension
-        # We rely on read_csv's auto-detection to handle delimiters/quotes
-        if data_file.lower().endswith(".sav"):
-            load_cmd = f'df <- read_sav("{data_file}")'
+        # 🟢 INTELLIGENT LOADING LOGIC
+        if loader_code:
+            # Use the strict, parser-derived code passed from the engine
+            load_cmd = loader_code
+        elif data_file:
+            # Fallback (Legacy Mode) - Simple guessing
+            if data_file.lower().endswith(".sav"):
+                load_cmd = f'df <- read_sav("{data_file}")'
+            else:
+                load_cmd = f'df <- read_csv("{data_file}", show_col_types = FALSE)'
         else:
-            load_cmd = f'df <- read_csv("{data_file}", show_col_types = FALSE)'
+             load_cmd = "stop('No data source provided')"
 
         return f"""
         library(dplyr)
@@ -86,11 +89,10 @@ class RRunner:
         source("{script_name}")
 
         tryCatch({{
-            # 2. Load Real Data (Found by Inspector)
+            # 2. Load Real Data
             {load_cmd}
 
             # 3. Run Pipeline
-            # We assume the function is named 'logic_pipeline'
             result <- logic_pipeline(df)
 
             # 4. Serialize First Row for Comparison
