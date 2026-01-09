@@ -1,151 +1,94 @@
-from typing import List, Optional, Callable, Dict
-import os
-import re
+# src/spss_engine/pipeline.py
+from spss_engine.extractor import AssignmentExtractor
 from spss_engine.lexer import SpssLexer
 from spss_engine.parser import SpssParser, TokenType
-from spss_engine.extractor import AssignmentExtractor
 from spss_engine.state import StateMachine, VariableVersion
+from spss_engine.transformer import CommandTransformer
+from spss_engine.events import (
+    SemanticEvent, FileReadEvent, FileMatchEvent, 
+    FileSaveEvent, AssignmentEvent, ScopeResetEvent
+)
+from typing import List, Optional
+import os
+
 
 class CompilerPipeline:
     def __init__(self):
+        self.state = StateMachine()
         self.parser = SpssParser()
-        self.extractor = AssignmentExtractor()
-        self.state_machine = StateMachine()
+        self.lexer = SpssLexer()
+        self.transformer = CommandTransformer()
+        self.extractor = AssignmentExtractor() 
+        
+        self.source_file = "script.sps"
         self.join_counter = 0
 
-        self.dispatch_table: Dict[TokenType, Callable[[str], None]] = {
-            TokenType.ASSIGNMENT: self._handle_assignment,
-            TokenType.CONDITIONAL: self._handle_conditional,
-            TokenType.FILE_MATCH: self._handle_file_match,
-            TokenType.CONTROL_FLOW: self._handle_control_flow,
-            TokenType.AGGREGATE: self._handle_aggregate,
-            TokenType.FILE_SAVE: self._handle_file_save,
-        }
+ 
+    def process(self, code: str):
+        commands = self.lexer.split_commands(code)
+        
+        for cmd_text in commands:
+            normalized = self.lexer.normalize_command(cmd_text)
+            parsed = self.parser.parse_command(normalized)
+            events = self.transformer.transform(parsed)
+            
+            for event in events:
+                self._apply_event(event)
 
-    def process(self, raw_code: str):
-        lexer = SpssLexer(raw_code)
-        commands = lexer.get_commands()
+    def _apply_event(self, event: SemanticEvent):
+        if isinstance(event, ScopeResetEvent):
+            if self.state._get_current_cluster().node_count > 0:
+                self.state.reset_scope()
 
-        for command in commands:
-            parsed = self.parser.parse_command(command)
-            handler = self.dispatch_table.get(parsed.type)
-            if handler:
-                handler(command)
+        elif isinstance(event, FileReadEvent):
+            self.state.register_input_file(event.filename)
 
-    def _handle_assignment(self, command: str):
-        target_var = self.extractor.extract_target(command)
-        if target_var:
-            raw_deps = self.extractor.extract_dependencies(command)
+        elif isinstance(event, FileSaveEvent):
+            self.state.register_output_file(event.filename)
+            self.state.register_control_flow(event.source_command)
+
+        elif isinstance(event, FileMatchEvent):
+            for f in event.files:
+                self.state.register_input_file(f)
+            self.join_counter += 1
+            sys_id = f"###SYS_JOIN_{self.join_counter}###"
+            self.state.register_assignment(sys_id, event.source_command, [])
+
+        elif isinstance(event, AssignmentEvent):
             resolved_deps = []
-            for dep_name in raw_deps:
-                if dep_name.upper() == target_var.upper(): continue 
+            for dep_name in event.dependencies:
                 try:
-                    current_ver = self.state_machine.get_current_version(dep_name)
-                    resolved_deps.append(current_ver)
-                except ValueError: pass
+                    ver = self.state.get_current_version(dep_name)
+                    resolved_deps.append(ver)
+                except ValueError:
+                    pass 
 
-            self.state_machine.register_assignment(
-                var_name=target_var, 
-                source=command,
+            self.state.register_assignment(
+                var_name=event.target,
+                source=event.source_command,
                 dependencies=resolved_deps
             )
-
-    def _handle_conditional(self, command: str):
-        self.state_machine.register_conditional(command)
-        target = self.extractor.extract_target(command)
-        if target: self._handle_assignment(command)
-
-    def _handle_file_match(self, command: str):
-        cmd_upper = command.strip().upper()
-        
-        # FIX: Robust Regex for Quoted OR Unquoted filenames
-        # Group 1: Quoted content
-        # Group 2: Unquoted content (stops at whitespace or next slash)
-        pattern = r"/(?:TABLE|FILE)\s*=\s*(?:['\"]([^'\"]+)['\"]|([^\s/]+))"
-        matches = re.findall(pattern, command, re.IGNORECASE)
-        
-        for quoted, unquoted in matches:
-            filename = quoted if quoted else unquoted
-            if filename != "*":
-                self.state_machine.register_input_file(filename)
-        
-        if "/FILE=*" not in cmd_upper:
-             self.state_machine.reset_scope()
-
-        self.join_counter += 1
-        sys_id = f"###SYS_JOIN_{self.join_counter}###"
-        self.state_machine.register_assignment(
-            var_name=sys_id, 
-            source=command, 
-            dependencies=[]
-        )
-
-    def _handle_control_flow(self, command: str):
-        self.state_machine.register_control_flow(command)
-        cmd_upper = command.strip().upper()
-        
-        if cmd_upper.startswith("GET DATA"):
-            self.state_machine.reset_scope()
             
-            # FIX: Robust Regex for GET DATA
-            pattern = r"/FILE\s*=\s*(?:['\"]([^'\"]+)['\"]|([^\s/]+))"
-            match = re.search(pattern, command, re.IGNORECASE)
-            if match:
-                # group(1) is quoted, group(2) is unquoted. One will be None.
-                filename = match.group(1) if match.group(1) else match.group(2)
-                self.state_machine.register_input_file(filename)
+            if event.source_command.upper().startswith("IF"):
+                self.state.register_conditional(event.source_command)
 
-    def _handle_file_save(self, command: str):
-        self.state_machine.register_control_flow(command)
-        
-        # FIX: Optional slash (/?OUTFILE) and Robust Grouping
-        pattern = r"/?OUTFILE\s*=\s*(?:['\"]([^'\"]+)['\"]|([^\s/]+))"
-        match = re.search(pattern, command, re.IGNORECASE)
-        if match:
-            filename = match.group(1) if match.group(1) else match.group(2)
-            self.state_machine.register_output_file(filename)
+    # 🟢 RESTORED: API Methods needed by tests
+    def get_variable_version(self, var_name: str) -> Optional[VariableVersion]:
+        try:
+            return self.state.get_current_version(var_name)
+        except ValueError:
+            return None
 
-    def _handle_aggregate(self, command: str):
-        matches = re.findall(r"/\s*([A-Za-z0-9_]+)\s*=", command)
-        break_match = re.search(r"/BREAK\s*=\s*([A-Za-z0-9_\s]+)", command, re.IGNORECASE)
-        deps = []
-        if break_match:
-            break_vars = break_match.group(1).split()
-            for bv in break_vars:
-                try:
-                    deps.append(self.state_machine.get_current_version(bv))
-                except ValueError: pass
-
-        for target in matches:
-            if target.upper() not in ["OUTFILE", "BREAK", "PRESORTED", "DOCUMENT", "MISSING"]:
-                self.state_machine.register_assignment(
-                    var_name=target, 
-                    source=command, 
-                    dependencies=deps
-                )
-        
-        # FIX: Robust Regex for AGGREGATE OUTFILE
-        pattern = r"/OUTFILE\s*=\s*(?:['\"]([^'\"]+)['\"]|([^\s/]+))"
-        match = re.search(pattern, command, re.IGNORECASE)
-        if match:
-            filename = match.group(1) if match.group(1) else match.group(2)
-            if filename != "*":
-                self.state_machine.register_output_file(filename)
-
-    # --- Utilities ---
+    def get_variable_history(self, var_name: str) -> List[VariableVersion]:
+        return self.state.get_history(var_name)
 
     def analyze_dead_code(self) -> List[str]:
-        raw_dead_ids = self.state_machine.find_dead_versions()
+        raw_dead_ids = self.state.find_dead_versions()
         return [vid for vid in raw_dead_ids if "###SYS_" not in vid]
 
     def process_file(self, file_path: str):
-        if not os.path.exists(file_path): raise FileNotFoundError(f"Source file not found: {file_path}")
-        with open(file_path, "r", encoding="utf-8") as f: self.process(f.read())
-
-    def get_variable_version(self, var_name: str) -> Optional[VariableVersion]:
-        history = self.state_machine.get_history(var_name)
-        if history: return history[-1]
-        return None
-
-    def get_variable_history(self, var_name: str):
-        return self.state_machine.get_history(var_name)
+        if not os.path.exists(file_path): 
+            raise FileNotFoundError(f"Source file not found: {file_path}")
+        self.source_file = file_path # Capture path
+        with open(file_path, "r", encoding="utf-8") as f: 
+            self.process(f.read())

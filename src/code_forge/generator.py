@@ -102,23 +102,27 @@ class RGenerator:
         lines.append("}")
         return "\n".join(lines)
     
-    # ... (Keep _transpile_node, _topological_sort, etc. unchanged)
+
     def _transpile_node(self, node: VariableVersion) -> str:
         target = node.id.rsplit('_', 1)[0].lower()
         source = node.source.strip()
         
+        # 🟢 Helper: Normalize variables using the Object, not string splitting
         def normalize_rhs(expression: str) -> str:
-            for dep_id in node.dependencies:
-                dep_name = dep_id.rsplit('_', 1)[0]
+            for dep_obj in node.dependencies:
+                # FIX: Access .id explicitly because dep_obj is a VariableVersion
+                dep_name = dep_obj.id.rsplit('_', 1)[0]
                 expression = re.sub(rf"(?i)\b{dep_name}\b", dep_name.lower(), expression)
             return RosettaStone.translate_expression(expression)
 
+        # 1. COMPUTE
         if re.match(r"(?i)^COMPUTE", source):
             if "=" in source:
                 rhs = source.split("=", 1)[1].strip().rstrip(".")
                 rhs = normalize_rhs(rhs)
                 return f"mutate({target} = {rhs})"
 
+        # 2. IF
         if re.match(r"(?i)^IF", source):
             match = re.search(r"(?i)IF\s*\((.+)\)\s+(\w+)\s*=\s*(.+?)\.?$", source)
             if match:
@@ -126,10 +130,35 @@ class RGenerator:
                 value = normalize_rhs(match.group(3).strip())
                 return f"mutate({target} = if_else({condition}, {value}, {target}))"
 
+        # 3. RECODE (🟢 NEW LOGIC)
+        if re.match(r"(?i)^RECODE", source):
+            # Regex to find (old=new) pairs
+            pairs = re.findall(r"\(([^=]+)=([^)]+)\)", source)
+            
+            cases = []
+            for old_val, new_val in pairs:
+                old_val = normalize_rhs(old_val.strip())
+                new_val = normalize_rhs(new_val.strip())
+                
+                # Handle ELSE
+                if old_val.upper() == "ELSE":
+                    cases.append(f"TRUE ~ {new_val}")
+                else:
+                    cases.append(f"{target} == {old_val} ~ {new_val}")
+            
+            # Default case: Keep original value if no ELSE provided
+            if not any("TRUE" in c for c in cases):
+                cases.append(f"TRUE ~ {target}")
+
+            args = ", ".join(cases)
+            return f"mutate({target} = case_when({args}))"
+
+        # 4. STRING
         if re.match(r"(?i)^STRING", source):
              return f"mutate({target} = as.character(NA))"
 
         return None
+
 
     def _topological_sort(self) -> List[VariableVersion]:
         all_nodes = []
@@ -139,11 +168,6 @@ class RGenerator:
 
     def _analyze_contract(self, nodes: List[VariableVersion]):
         pass
-
-
-
-
-
 
 
     # ... (Keep _transpile_node, _topological_sort as they were) ...

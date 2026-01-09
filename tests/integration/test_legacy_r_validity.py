@@ -1,6 +1,6 @@
 import pytest
 import os
-from code_forge.runner import RRunner
+from code_forge.R_runner import RRunner
 
 class TestLegacyRValidity:
     

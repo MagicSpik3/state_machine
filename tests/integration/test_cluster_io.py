@@ -24,7 +24,7 @@ class TestClusterIO:
         pipeline = CompilerPipeline()
         pipeline.process(code)
         
-        conductor = Conductor(pipeline.state_machine)
+        conductor = Conductor(pipeline.state)
         clusters = conductor.identify_clusters()
         
         # 1. Verify Isolation (Zoom In)

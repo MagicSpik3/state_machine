@@ -45,5 +45,5 @@ class TestFileBridge:
         
         # For now, let's just assert that we detect the file operations
         # This will fail until we implement the parser logic
-        match_nodes = [v for k, hist in pipeline.state_machine.history_ledger.items() for v in hist if "MATCH FILES" in v.source]
+        match_nodes = [v for k, hist in pipeline.state.history_ledger.items() for v in hist if "MATCH FILES" in v.source]
         assert len(match_nodes) > 0, "Parser failed to detect MATCH FILES as a state event"
