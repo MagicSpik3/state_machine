@@ -1,52 +1,56 @@
 import pytest
-import os
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from spec_writer.orchestrator import SpecOrchestrator
 from spss_engine.state import StateMachine
+from spec_writer.describer import SpecGenerator  # 🟢 Import Real Component
 
 def test_orchestrator_graph_handoff(tmp_path):
     """
-    Targeted Verification:
-    Ensures SpecOrchestrator calls GraphGenerator.render() using the 
-    correct instance method signature, not the old static/keyword signature.
+    Strict Integration Test:
+    Verifies that SpecOrchestrator correctly coordinates the Pipeline,
+    the SpecGenerator, and the GraphGenerator.
     """
-    # 1. Setup Orchestrator
-    orchestrator = SpecOrchestrator()
-    
-    # 2. Inject Dummy State (Bypass parsing/ingest)
-    # We manually populate the pipeline's state machine
+    # 1. Setup Mock LLM (The External Boundary)
+    mock_llm = MagicMock()
+    mock_llm.generate.return_value = "Generated Spec Content"
+
+    # 2. Setup Orchestrator
+    orchestrator = SpecOrchestrator(llm_client=mock_llm)
+
+    # 3. Inject Real State (Bypass parsing/ingest)
     state = StateMachine()
     state.register_assignment("TEST_VAR", "COMPUTE TEST_VAR = 1.", dependencies=[])
-    orchestrator.pipeline.state_machine = state
     
-    # Mock the text generator so we don't need LLM/Ollama
-    orchestrator.generator = MagicMock()
-    orchestrator.generator.generate_report.return_value = "# Mock Spec"
+    # Wire up the Orchestrator's internal pipeline state
+    # We use .state directly because we removed the .state_machine alias
+    orchestrator.pipeline.state = state
+    
+    # 🟢 CRITICAL FIX: MANUALLY INJECT THE GENERATOR
+    # The Orchestrator throws ValueError if this is None.
+    # Since we skipped ingest(), we must create it manually here.
+    orchestrator.generator = SpecGenerator(state, mock_llm)
 
-    # 3. Execute
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
-    
-    try:
-        # This calls 'generate_comprehensive_spec', which triggers GraphGenerator.
-        # If Orchestrator passes 'filename=...', this will raise TypeError.
-        orchestrator.generate_comprehensive_spec(str(output_dir), "handoff_test")
+    # 4. Mock ONLY the Graphviz Render (System Call)
+    with patch("spec_writer.orchestrator.GraphGenerator") as MockGenClass:
+        mock_graph_instance = MockGenClass.return_value
         
-    except TypeError as e:
-        if "unexpected keyword argument" in str(e):
-            pytest.fail(f"🚨 API MISMATCH: Orchestrator used old signature. Error: {e}")
-        else:
-            raise e
+        # 5. Execute
+        out_dir = tmp_path / "docs"
+        out_dir.mkdir()
+        
+        # This will now succeed because self.generator is set
+        md_path = orchestrator.generate_comprehensive_spec(
+            output_dir=str(out_dir), 
+            filename_root="test_flow"
+        )
+        
+        # 6. Verify Graph Integration
+        # Did Orchestrator pass the REAL state to the GraphGenerator?
+        MockGenClass.assert_called_once_with(state)
+        
+        # Did it call render?
+        assert mock_graph_instance.render.called
 
-    # 4. Verify
-    # Graphviz automatically adds .png extension
-    expected_png = output_dir / "handoff_test_flow.png"
-    
-    # We assert the code attempted to create the file
-    # (If Graphviz is missing on the system, this might fail differently, 
-    # but the TypeError check above is the critical part)
-    if not expected_png.exists():
-        # Check if maybe it made a file without extension (old behavior)
-        naked_file = output_dir / "handoff_test_flow"
-        if naked_file.exists():
-            pytest.fail("Orchestrator generated file without extension (Old Behavior)")
+        # 7. Verify Spec Integration
+        # Did the generated file contain the text returned by our Mock LLM?
+        assert "Generated Spec Content" in open(md_path).read()

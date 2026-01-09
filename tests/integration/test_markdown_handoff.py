@@ -19,7 +19,7 @@ def test_orchestrator_markdown_handoff(tmp_path):
     # 2. Inject Dummy State (Bypass parsing)
     state = StateMachine()
     state.register_assignment("TEST_VAR", "COMPUTE TEST_VAR = 1.", dependencies=[])
-    orchestrator.pipeline.state_machine = state
+    orchestrator.pipeline.state = state
     
     # Manually trigger ingest's side effect (initializing the generator)
     # We can't call ingest() because it requires a real file.

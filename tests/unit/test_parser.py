@@ -16,10 +16,13 @@ class TestSpssParser:
         parsed = self.parser.parse_command(cmd)
         assert parsed.type == TokenType.CONDITIONAL
 
+
     def test_identify_recode_as_assignment(self):
+        # 🟢 UPDATED: Expect TokenType.RECODE, not ASSIGNMENT
         cmd = "RECODE x (1=2)."
         parsed = self.parser.parse_command(cmd)
-        assert parsed.type == TokenType.ASSIGNMENT
+        assert parsed.type == TokenType.RECODE
+
 
     def test_identify_file_save(self):
         cmd = "SAVE OUTFILE='data.sav'."

@@ -306,3 +306,45 @@ Recovered from a git branch scramble. The goal was to finalize the R Transpilati
 
 ### Outcome
 All unit tests passed. End-to-end verification of the BMI pipeline is now green. The system can successfully intake SPSS logic, convert it to R, and verify it runs without crashing on missing variables.
+
+## [2026-01-09] Refactor: Pipeline Architecture & Intermediate Representation
+
+**Branch:** `feature/pipeline-refactor`
+**Status:** Complete & Verified
+
+### Context
+Following a critical architectural review, we moved away from the "God Object" pattern in `CompilerPipeline`. The previous implementation entangled parsing, semantic analysis, and state mutation, making it fragile and difficult to test (e.g., "Regex-based semantics").
+
+### Technical Implementation
+
+#### 1. The Intermediate Representation (IR)
+* **New Component:** `src/spss_engine/events.py`
+* **Design:** Introduced typed Data Classes (`FileReadEvent`, `AssignmentEvent`, `ScopeResetEvent`) to represent *what* happened, decoupling it from *how* it was parsed.
+
+#### 2. The Transformer
+* **New Component:** `src/spss_engine/transformer.py`
+* **Design:** Isolated all "dirty" regex logic here. This component consumes `ParsedCommand` objects and emits strict `SemanticEvents`.
+* **Fix:** Implemented logic to handle legacy unquoted filenames (e.g., `GET FILE = mydata.`), specifically stripping the trailing dot which was previously causing lookup failures.
+
+#### 3. The Coordinator
+* **Refactor:** `src/spss_engine/pipeline.py`
+* **Change:** Stripped of all parsing logic. It now acts as a clean loop: `Lex -> Parse -> Transform -> Apply Event`.
+* **Result:** The pipeline is now closed for modification but open for extension (adding new commands happens in the Transformer/Events layer).
+
+### Verification
+* **Unit Tests:** Added comprehensive suites for `events` and `transformer`.
+* **Integration:** Verified `test_cluster_io.py` passes with the new architecture, confirming that scope isolation logic (Cluster A vs Cluster B) works correctly.
+
+---
+
+### 💡 Future Concept: The "Strictifier" (SPSS to PSPP Converter)
+
+**Problem:** Commercial SPSS is "loose" (allows ambiguous syntax like `SAVE /FILE=...`), whereas PSPP (our verification engine) is "strict" (requires `SAVE /OUTFILE=...`). Currently, verification fails on valid legacy code unless we manually patch the source files.
+
+**Proposal:** Implement a **Multi-pass Transpiler** ("The Strictifier").
+
+1.  **Pass 1 (Ingest):** Use our robust `Lexer` and `Transformer` to read the "loose" legacy SPSS into our standardized IR (Semantic Events).
+2.  **Pass 2 (Sanitize):** Iterate over the events and normalize attributes (e.g., force `FileSaveEvent` to always use strict `/OUTFILE` syntax).
+3.  **Pass 3 (Codegen):** Generate a temporary, syntax-perfect `.sps` file specifically for the PSPP Runner.
+
+**Benefit:** This would allow us to verify *any* legacy file against ground truth without touching the original source code, significantly increasing our verification success rate.

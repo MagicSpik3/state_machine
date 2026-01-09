@@ -86,9 +86,10 @@ class TestRRunner:
         assert wrapper_path.exists()
         
         content = wrapper_path.read_text()
-        
-        # Assertions
+
+        # ... inside test_input_discovery_and_mocking ...
+        content = wrapper_path.read_text()
         assert "df <- data.frame" in content
-        assert "WEIGHT = 1" in content
-        assert "HEIGHT = 1" in content
+        assert "weight = 1" in content
+        assert "height = 1" in content
         assert "source" in content        

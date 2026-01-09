@@ -1,6 +1,6 @@
-from typing import Dict, List, Optional
 import logging
 import os
+from typing import Optional
 from common.llm import OllamaClient
 from spss_engine.pipeline import CompilerPipeline
 from spec_writer.describer import SpecGenerator
@@ -18,7 +18,9 @@ class SpecOrchestrator:
     def ingest(self, file_path: str):
         logger.info(f"Processing {os.path.basename(file_path)}...")
         self.pipeline.process_file(file_path)
-        self.generator = SpecGenerator(self.pipeline.state_machine, self.llm_client)
+        
+        # 🟢 FIX: Use .state directly
+        self.generator = SpecGenerator(self.pipeline.state, self.llm_client)
 
     def generate_comprehensive_spec(self, output_dir: str, filename_root: str):
         if not self.generator:
@@ -27,17 +29,14 @@ class SpecOrchestrator:
         # 1. Analyze Dead Code
         dead_ids = self.pipeline.analyze_dead_code()
         
-        # 2. Render Graph (FIXED INSTANCE CALL)
-        # Instantiate the generator with state
-        graph_gen = GraphGenerator(self.pipeline.state_machine)
+        # 2. Render Graph
+        # 🟢 FIX: Use .state directly
+        graph_gen = GraphGenerator(self.pipeline.state)
         
         # Define base path (Graphviz appends extension)
         graph_base_path = os.path.join(output_dir, f"{filename_root}_flow")
         
         logger.info(f"Rendering Graph to {graph_base_path}...")
-        
-        # CORRECT CALL: Just pass the positional path argument.
-        # DO NOT use 'filename=' or 'format='.
         graph_gen.render(graph_base_path)
 
         # 3. Generate Spec

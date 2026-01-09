@@ -62,7 +62,7 @@ class TestSpecStructure:
     def test_identify_distinct_processing_phases(self, legacy_code):
         pipeline = CompilerPipeline()
         pipeline.process(legacy_code)
-        conductor = Conductor(pipeline.state_machine)
+        conductor = Conductor(pipeline.state)
         clusters = conductor.identify_clusters()
         non_empty = [c for c in clusters if len(c) > 0]
         assert len(non_empty) >= 2, f"Logic should be fragmented, found {len(non_empty)}"
@@ -75,7 +75,7 @@ class TestSpecStructure:
         pipeline.process(legacy_code)
         
         mock_ai = MockLLM()
-        generator = SpecGenerator(pipeline.state_machine, mock_ai)
+        generator = SpecGenerator(pipeline.state, mock_ai)
         spec_content = generator.generate_report(dead_ids=[], runtime_values={})
         
         output_dir = "tests/integration"

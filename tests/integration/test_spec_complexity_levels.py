@@ -23,7 +23,7 @@ class QualityGate:
         # prohibited_leaks = {"Main_Cluster_Name": ["bad_var_1", "bad_var_2"]}
         # We need to map the clusters to names heuristically
         
-        conductor = Conductor(pipeline.state_machine)
+        conductor = Conductor(pipeline.state)
         for i, cluster in enumerate(clusters):
             # Flatten the cluster to a string for checking
             cluster_content = " ".join(conductor._topological_sort(cluster))
@@ -58,7 +58,7 @@ class TestSpecComplexityLevels:
         pipeline = CompilerPipeline()
         pipeline.process(code)
         
-        conductor = Conductor(pipeline.state_machine)
+        conductor = Conductor(pipeline.state)
         clusters = conductor.identify_clusters()
         
         # Expectation: 1 Cluster (It's a straight line)
@@ -90,7 +90,7 @@ class TestSpecComplexityLevels:
         pipeline = CompilerPipeline()
         pipeline.process(code)
         
-        conductor = Conductor(pipeline.state_machine)
+        conductor = Conductor(pipeline.state)
         clusters = conductor.identify_clusters()
         
         # Expectation: 2 Clusters (ETL, Main)
@@ -130,7 +130,7 @@ class TestSpecComplexityLevels:
         pipeline = CompilerPipeline()
         pipeline.process(code)
         
-        conductor = Conductor(pipeline.state_machine)
+        conductor = Conductor(pipeline.state)
         clusters = conductor.identify_clusters()
         
         # Expectation: 3 Clusters.

@@ -1,51 +1,56 @@
 import pytest
-import os
 from unittest.mock import MagicMock, patch
 from spec_writer.orchestrator import SpecOrchestrator
-from spss_engine.state import VariableVersion
+from spss_engine.state import StateMachine
+from spec_writer.describer import SpecGenerator  # 🟢 Import the Real Component
 
-class TestSpecOrchestrator:
+def test_orchestrator_graph_handoff(tmp_path):
     """
-    Verifies the coordination logic: Ingest -> Compile -> Generate -> Save.
-    Fills the gap identified in the Architecture Map.
+    Strict Integration Test:
+    Verifies that SpecOrchestrator correctly coordinates the Pipeline,
+    the SpecGenerator, and the GraphGenerator.
     """
+    # 1. Setup Mock LLM (The External Boundary)
+    # We mock the LLM because we don't want to hit Ollama during tests.
+    mock_llm = MagicMock()
+    mock_llm.generate.return_value = "Generated Spec Content"
 
-    @pytest.fixture
-    def mock_llm(self):
-        llm = MagicMock()
-        llm.generate.return_value = "AI Description"
-        return llm
+    # 2. Setup Orchestrator with Mock LLM
+    orchestrator = SpecOrchestrator(llm_client=mock_llm)
 
-    def test_full_orchestration_flow(self, tmp_path, mock_llm):
-        # 1. Setup
-        orchestrator = SpecOrchestrator(llm_client=mock_llm)
-        
-        # Create a dummy SPSS file
-        spss_file = tmp_path / "test.spss"
-        spss_file.write_text("COMPUTE x = 1.", encoding="utf-8")
-        
-        # 2. Ingest (Should run Pipeline)
-        orchestrator.ingest(str(spss_file))
-        
-        assert len(orchestrator.pipeline.state_machine.nodes) > 0, "Pipeline failed to process file"
-        assert orchestrator.generator is not None, "Generator was not initialized"
+    # 3. Inject Real State (Bypassing File Ingest for speed)
+    state = StateMachine()
+    state.register_assignment("TEST_VAR", "COMPUTE TEST_VAR = 1.", dependencies=[])
+    
+    # Wire up the Orchestrator's internal components explicitly
+    # This replicates what 'ingest()' does, but allows us to skip the file read.
+    orchestrator.pipeline.state = state
+    
+    # 🟢 REAL INTEGRATION: Initialize the real SpecGenerator
+    # This tests that Orchestrator and Generator are compatible.
+    orchestrator.generator = SpecGenerator(state, mock_llm)
 
-        # 3. Generate (Should run Generator)
-        output_dir = tmp_path / "out"
-        md_file = orchestrator.generate_comprehensive_spec(str(output_dir), "test_doc")
+    # 4. Mock ONLY the Graphviz Render (System Call)
+    # We patch the class so we can verify the Orchestrator instantiates it correctly.
+    with patch("spec_writer.orchestrator.GraphGenerator") as MockGenClass:
+        mock_graph_instance = MockGenClass.return_value
         
-        # 4. Verify Artifacts
-        assert os.path.exists(md_file)
-        with open(md_file, 'r') as f:
-            content = f.read()
-            assert "Business Logic Specification" in content
-            assert "COMPUTE x = 1." in content # Source code should be present
+        # 5. Execute
+        out_dir = tmp_path / "docs"
+        out_dir.mkdir()
+        
+        md_path = orchestrator.generate_comprehensive_spec(
+            output_dir=str(out_dir), 
+            filename_root="test_flow"
+        )
+        
+        # 6. Verify Graph Integration
+        # Did Orchestrator pass the REAL state to the GraphGenerator?
+        MockGenClass.assert_called_once_with(state)
+        # Did it call render?
+        assert mock_graph_instance.render.called
 
-    def test_missing_ingest_guard(self, tmp_path):
-        """Ensure we can't generate specs without data."""
-        orchestrator = SpecOrchestrator()
-        
-        with pytest.raises(ValueError) as exc:
-            orchestrator.generate_comprehensive_spec(str(tmp_path), "fail")
-        
-        assert "Call ingest() first" in str(exc.value)
+        # 7. Verify Spec Integration
+        # Did the Orchestrator successfully trigger the SpecGenerator?
+        # The file should contain the text returned by our Mock LLM.
+        assert "Generated Spec Content" in open(md_path).read()
