@@ -41,6 +41,11 @@
 ---
 ## 📦 Package: `src/code_forge`
 
+### 📄 `R_runner.py`
+- ✅ 🏛️ **RRunner**  <span style='color:green'>Found 1 test(s)</span>
+    - 🧪 `tests/unit/test_runners.py::TestRunners`
+    - *Methods:* run_and_capture, _read_first_row
+
 ### 📄 `generator.py`
 - ✅ 🏛️ **RGenerator**  <span style='color:green'>Found 1 test(s)</span>
     - 🧪 `tests/unit/test_writer.py::TestRGenerator`
@@ -60,11 +65,6 @@
 - ✅ 🏛️ **RosettaStone**  <span style='color:green'>Found 1 test(s)</span>
     - 🧪 `tests/unit/test_rosetta.py::TestRosettaStone`
     - *Methods:* _split_args, translate_expression
-
-### 📄 `runner.py`
-- ✅ 🏛️ **RRunner**  <span style='color:green'>Found 1 test(s)</span>
-    - 🧪 `tests/unit/test_runners.py::TestRunners`
-    - *Methods:* run_and_capture, _read_first_row
 
 ---
 ## 📦 Package: `src/spss_engine`
@@ -103,7 +103,7 @@
     - 🧪 `tests/unit/test_repository.py::TestRepository`
     - *Methods:* scan, list_files, get_content, save_spec, get_spec, get_full_path
 
-### 📄 `runner.py`
+### 📄 `spss_runner.py`
 - ✅ 🏛️ **PsppRunner**  <span style='color:green'>Found 1 test(s)</span>
     - 🧪 `tests/unit/test_runners.py::TestRunners`
     - *Methods:* run_and_probe, _read_first_row

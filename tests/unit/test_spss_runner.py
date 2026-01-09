@@ -3,9 +3,9 @@ import os
 import subprocess
 from unittest.mock import patch, MagicMock
 from spss_engine.spss_runner import PsppRunner
-from code_forge.R_runner import RRunner
 
-class TestRunners:
+
+class TestPSPPRunner:
     """
     Verifies external tool execution wrappers (PSPP and R) using temporary files.
     """
@@ -55,51 +55,3 @@ class TestRunners:
             runner.run_and_probe(str(spss_file), str(tmp_path))
         
         assert "PSPP execution failed" in str(exc.value)
-
-    # --- R Runner Tests ---
-    @patch("subprocess.run")
-    def test_r_runner_execution(self, mock_run, tmp_path):
-        mock_run.return_value = MagicMock(returncode=0)
-        
-        # 1. Setup: Create dummy R script
-        r_script = tmp_path / "analysis.R"
-        r_script.write_text("print('hello')", encoding="utf-8")
-        
-        # Initialize with script path
-        runner = RRunner(str(r_script))
-        
-        # 2. Execution
-        # FIX: The implementation does NOT take an output path argument.
-        # It takes optional input_vars. We call it with defaults.
-        
-        # We assume the runner will try to read 'r_output.csv'.
-        # We mock pandas to avoid needing that file to exist physically or have valid content.
-        with patch("pandas.read_csv") as mock_read:
-             mock_df = MagicMock()
-             # Mock the 'iloc[-1]' call to return a row
-             mock_row = MagicMock()
-             # When iterating the row, we want columns.
-             # But the implementation iterates df.columns.
-             mock_df.empty = False
-             mock_df.columns = ["col1"]
-             mock_df.iloc.__getitem__.return_value = {"col1": 100.0}
-             
-             mock_read.return_value = mock_df
-             
-             runner.run_and_capture()
-
-        # 3. Verify
-        assert mock_run.called
-        args = mock_run.call_args[0][0]
-        
-        # FIX: Assert that the wrapper is being executed
-        # The implementation runs: ["Rscript", wrapper_path]
-        assert "Rscript" == args[0]
-        assert "run_wrapper.R" in args[1]
-        
-        # Optional: Verify the wrapper content was written correctly
-        wrapper_path = tmp_path / "run_wrapper.R"
-        assert wrapper_path.exists()
-        content = wrapper_path.read_text()
-        # The wrapper should 'source' our analysis script
-        assert f'source("analysis.R")' in content

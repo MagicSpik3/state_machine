@@ -77,12 +77,16 @@
 ### 📄 `graph.py`
 **Imports:**
 - `from spss_engine.state import StateMachine`
+- `from spss_engine.state import VariableVersion`
 - `from typing import List`
 - `from typing import Optional`
 - `import graphviz`
+- `import logging`
+- `import os`
 
 **Definitions:**
 - 🏛️ **Class** `GraphGenerator`
+    - `def __init__(...)`
     - `def _sanitize_label(...)`
     - `def generate_dot(...)`
     - `def render(...)`
@@ -93,6 +97,7 @@
 **Imports:**
 - `from common.llm import OllamaClient`
 - `from spec_writer.describer import SpecGenerator`
+- `from spec_writer.graph import GraphGenerator`
 - `from spec_writer.review import ProjectArchitect`
 - `from spss_engine.pipeline import CompilerPipeline`
 - `from typing import Dict`
@@ -125,6 +130,25 @@
 
 ---
 ## 📦 Package: `src/code_forge`
+
+### 📄 `R_runner.py`
+**Imports:**
+- `from typing import Dict`
+- `from typing import List`
+- `from typing import Optional`
+- `import csv`
+- `import logging`
+- `import os`
+- `import pandas`
+- `import subprocess`
+
+**Definitions:**
+- 🏛️ **Class** `RRunner`
+    - `def __init__(...)`
+    - `def run_and_capture(...)`
+    - `def _read_first_row(...)`
+
+---
 
 ### 📄 `__init__.py`
 
@@ -196,25 +220,6 @@
 - 🏛️ **Class** `RosettaStone`
     - `def _split_args(...)`
     - `def translate_expression(...)`
-
----
-
-### 📄 `runner.py`
-**Imports:**
-- `from typing import Dict`
-- `from typing import List`
-- `from typing import Optional`
-- `import csv`
-- `import logging`
-- `import os`
-- `import pandas`
-- `import subprocess`
-
-**Definitions:**
-- 🏛️ **Class** `RRunner`
-    - `def __init__(...)`
-    - `def run_and_capture(...)`
-    - `def _read_first_row(...)`
 
 ---
 ## 📦 Package: `src/spss_engine`
@@ -344,7 +349,7 @@
 
 ---
 
-### 📄 `runner.py`
+### 📄 `spss_runner.py`
 **Imports:**
 - `from typing import Dict`
 - `from typing import List`

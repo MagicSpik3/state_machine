@@ -18,7 +18,7 @@ from spec_writer.graph import GraphGenerator
 from spec_writer.describer import SpecGenerator
 from common.llm import OllamaClient
 
-# Setup Logging
+# Setup Logging (Default INFO)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%H:%M:%S')
 logger = logging.getLogger("Statify")
 
@@ -61,18 +61,18 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
             runtime_values = runner.run_and_probe(full_path, output_dir=target_dir)
             logger.info(f"  ✅ Verification Successful. Captured {len(runtime_values)} values.")
         except Exception as e:
-            logger.warning(f"  ⚠️ Verification Failed: {e}")
+            # In verbose mode, this would show the full stack trace
+            logger.warning(f"  ⚠️ Verification Failed: {e}") 
+            logger.debug(f"PSPP Error Details:", exc_info=True)
     else:
         logger.info("  ℹ️  PSPP not found. Skipping verification.")
 
-    # 4. Visualization Phase (FIXED: New Instance-Based API)
+    # 4. Visualization Phase
     img_name = os.path.join(target_dir, f"{base_name}_flow")
     logger.info(f"  🎨 Rendering Graph to {img_name}.png...")
     
     try:
-        # Instantiate the generator with the state machine
         graph_gen = GraphGenerator(pipeline.state_machine)
-        # Call render with the positional output path
         graph_gen.render(img_name)
     except Exception as e:
         logger.error(f"  ❌ Graph Generation Failed: {e}")
@@ -100,12 +100,15 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
         # B. AI Refinement
         if refine_mode:
             logger.info(f"  🧠 Refining code with qwen2.5-coder:latest...")
-            refiner = CodeRefiner(model="qwen2.5-coder:latest")
-            refined = refiner.refine(r_code)
-            if refined:
-                r_code = refined
+            try:
+                refiner = CodeRefiner(model="qwen2.5-coder:latest")
+                refined = refiner.refine(r_code)
+                if refined:
+                    r_code = refined
+            except Exception as e:
+                logger.warning(f"  ⚠️ Refinement failed, reverting to basic translation: {e}")
 
-        # C. Save the Code (Crucial step: Code exists now!)
+        # C. Save the Code
         r_path = os.path.join(target_dir, f"{base_name}.R")
         with open(r_path, "w", encoding="utf-8") as f:
             f.write(r_code)
@@ -122,14 +125,11 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
         if runtime_values:
             logger.info("  ⚖️  Running Equivalence Check (Black Box vs White Box)...")
             
-            # Initialize Runner with the file we just saved
-            r_runner = RRunner(r_path)
+            # 🟢 FIX: Pass the StateMachine to RRunner so it can discover inputs!
+            r_runner = RRunner(r_path, state_machine=pipeline.state_machine)
             
-            # Extract inputs to prevent "object not found" errors
-            all_vars = list(pipeline.state_machine.history_ledger.keys())
-            
-            # Run R script with dummy inputs
-            r_results = r_runner.run_and_capture(input_vars=all_vars)
+            # 🟢 FIX: Call without arguments to trigger auto-discovery
+            r_results = r_runner.run_and_capture()
             
             matches = 0
             mismatches = 0
@@ -162,7 +162,7 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
             else:
                 logger.warning("  ❓ No overlapping variables found to compare.")
 
-        # 8. Architectural Review (Only if refining, as Architect needs the Refined code)
+        # 8. Architectural Review
         if refine_mode: 
             logger.info("  🏛️  Summoning the Architect...")
             
@@ -197,7 +197,7 @@ def process_directory(source_root: str, output_root: str, model: str, generate_c
         try:
             process_file(full_path, rel_path, output_root, model, generate_code, refine_mode)
         except Exception as e:
-            logger.error(f"❌ Failed to process {rel_path}: {e}")
+            logger.error(f"❌ Failed to process {rel_path}: {e}", exc_info=True) # Full stack trace
             errors.append(rel_path)
 
     print("=" * 60)
@@ -213,7 +213,16 @@ def main():
     parser.add_argument("--code", action="store_true", help="Generate R code alongside the spec")
     parser.add_argument("--refine", action="store_true", help="Use AI to refine the generated code")
     
+    # 🟢 NEW: Verbose Flag
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug logging")
+    
     args = parser.parse_args()
+    
+    # 🟢 NEW: Configure Logging Level
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("🔧 Verbose mode enabled")
     
     source_path = os.path.abspath(args.path)
     output_path = os.path.abspath(args.output)

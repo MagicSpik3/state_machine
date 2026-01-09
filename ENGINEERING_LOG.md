@@ -276,3 +276,33 @@ Achieve 100% test pass rate across Unit, Integration, and End-to-End suites by s
 * **Test Suite:** 103 Tests Passed (0 Failures).
 * **Coverage:** 100% Component Functionality.
 * **Status:** The system is now robust, verified, and ready for deployment.
+
+
+## [2026-01-08] Recovery: The Data Bridge Fix
+
+**Branch:** `feature/fix-r-generation-and-mocking`
+**Status:** Complete
+
+### Context
+Recovered from a git branch scramble. The goal was to finalize the R Transpilation pipeline, ensuring that legacy SPSS `RECODE` logic is correctly ported to R and that the verification runner (which proves the R code works) is smart enough to mock missing input data.
+
+### Technical Implementation
+
+#### 1. The Object/String Duality Fix
+* **Component:** `src/spss_engine/state.py`
+* **Issue:** The generator logic assumed dependencies were stored as strings (IDs), but they were `VariableVersion` objects. This caused `.rsplit` errors.
+* **Fix:** Added `__str__` dunder method to `VariableVersion` returning `self.id`. Updated `RGenerator._transpile_node` to explicitly access `.id` when normalizing RHS expressions.
+
+#### 2. R Logic Generation (RECODE)
+* **Component:** `src/code_forge/generator.py`
+* **Logic:** Implemented a regex parser for `RECODE var (old=new)`.
+* **Transformation:** * SPSS: `RECODE x (1=10) (ELSE=99).`
+    * R: `mutate(x = case_when(x == 1 ~ 10, TRUE ~ 99))`
+
+#### 3. Auto-Discovery for Mock Data
+* **Component:** `src/code_forge/runner.py`
+* **Improvement:** The runner was dumb; it didn't know what variables the script needed.
+* **Change:** Injected `StateMachine` into `RRunner`. Added `_discover_inputs()` method which calculates `Required Vars - Defined Vars` to identify inputs (e.g., `weight`, `height`). These are now initialized as `1` in the R wrapper to prevent execution crashes.
+
+### Outcome
+All unit tests passed. End-to-end verification of the BMI pipeline is now green. The system can successfully intake SPSS logic, convert it to R, and verify it runs without crashing on missing variables.

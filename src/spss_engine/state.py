@@ -13,6 +13,10 @@ class VariableVersion:
     def id(self):
         return f"{self.name}_{self.version}"
 
+    # 🟢 ADD THIS METHOD
+    def __str__(self):
+        return self.id
+
 @dataclass
 class ClusterMetadata:
     index: int
