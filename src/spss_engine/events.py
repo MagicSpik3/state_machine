@@ -1,16 +1,30 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+@dataclass
+class SemanticEvent:
+    source_command: str
+
+@dataclass
+class FileReadEvent(SemanticEvent):
+    """
+    Represents a destructive load with specific parsing rules.
+    """
+    filename: str
+    format: str = "TXT" # TXT, SAV, XLS
+    delimiter: str = "," # Default csv
+    qualifier: Optional[str] = '"'
+    header_row: bool = True
+    skip_rows: int = 0
+    # List of (variable_name, spss_type_str) e.g., ('age', 'F8.0')
+    variables: List[Tuple[str, str]] = field(default_factory=list)
+
 
 @dataclass
 class SemanticEvent:
     """Base class for all semantic events in the pipeline."""
     source_command: str
 
-@dataclass
-class FileReadEvent(SemanticEvent):
-    """Represents a destructive load (GET DATA, GET FILE)."""
-    filename: str
-    format: str = "unknown"
 
 @dataclass
 class FileMatchEvent(SemanticEvent):

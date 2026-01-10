@@ -117,6 +117,15 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
     with open(report_file, "w") as f:
         f.write(spec_content)
 
+
+
+            
+            # ... (comparison logic) ...
+
+
+
+
+
     # 6. Code Generation & Verification Phase
     if generate_code:
         logger.info("  ⚙️  Generating R Code...")
@@ -151,17 +160,35 @@ def process_file(full_path: str, relative_path: str, output_root: str, model: st
             f.write(desc_content)
         logger.info(f"  📦 Saved Package Metadata: {desc_path}")
         
-        # 7. Equivalence Check (Run ONLY if we have ground truth)
+
+
+
+        
+        # 7. Equivalence Check
         if runtime_values:
             logger.info("  ⚖️  Running Equivalence Check (Black Box vs White Box)...")
             
-            # 🟢 FIX: Use .state directly
             r_runner = RRunner(r_path, state_machine=pipeline.state)
             
-            # 🟢 FIX: Pass the discovered input file to force strict loading
-            main_input = input_files[0] if input_files else None
-            r_results = r_runner.run_and_capture(data_file=main_input)
+            # 🟢 NEW: Extract Loader Logic from Pipeline Events
+            loader_snippet = None
             
+            # Find the FileReadEvent that corresponds to our input
+            # (Assuming single input for now, or taking the first one found)
+            from spss_engine.events import FileReadEvent
+            
+            # pipeline.events contains the ordered history
+            read_event = next((e for e in pipeline.events if isinstance(e, FileReadEvent)), None)
+            
+            if read_event:
+                logger.info(f"    Using strict loader for {read_event.filename}")
+                loader_snippet = r_gen.generate_loader_snippet(read_event)
+            
+            # Pass BOTH the file (for fallback) and the strict code
+            main_input = input_files[0] if input_files else None
+            r_results = r_runner.run_and_capture(data_file=main_input, loader_code=loader_snippet)
+
+           
             matches = 0
             mismatches = 0
             
