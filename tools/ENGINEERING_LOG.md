@@ -348,3 +348,37 @@ Following a critical architectural review, we moved away from the "God Object" p
 3.  **Pass 3 (Codegen):** Generate a temporary, syntax-perfect `.sps` file specifically for the PSPP Runner.
 
 **Benefit:** This would allow us to verify *any* legacy file against ground truth without touching the original source code, significantly increasing our verification success rate.
+
+
+## [2026-01-09] Refactor Complete: Event-Driven Pipeline & Robust Integration
+
+**Branch:** `feature/pipeline-refactor`
+**Status:** Merged & Verified
+
+### Architectural Changes
+1.  **Pipeline Decoupling:** * Decomposed `CompilerPipeline` (God Object) into specific components:
+        * `Transformer`: Pure logic class that converts Parsed Commands -> Semantic Events.
+        * `Events`: Strict Data Classes (`FileReadEvent`, `AssignmentEvent`) acting as the Intermediate Representation (IR).
+        * `State`: The single source of truth for memory and scope.
+    * Removed regex-based logic from the main loop; specific parsing rules (e.g., `/?FILE=`) are now isolated in `Transformer`.
+
+2.  **Strict OO Enforcement:**
+    * **Removed** the backward-compatibility alias `pipeline.state_machine`.
+    * **Updated** all consumers (`SpecOrchestrator`, `Statify CLI`, `RRunner`) to access `pipeline.state` directly.
+    * **Benefit:** Clearer API surface; failed tests now indicate architectural violations rather than silent aliasing.
+
+### Integration Fixes
+1.  **Statify CLI (`statify.py`):**
+    * Integrated `SourceInspector` to auto-detect input files (`GET DATA`).
+    * Added `copy_dependencies()` to ensure CSV/SAV files exist in the build directory.
+    * Fixed `RRunner` instantiation to pass discovered data files explicitly.
+
+2.  **R Execution (`RRunner.py`):**
+    * **Removed** the fragile "Mock Data" generator (`df <- data.frame(id=1)`).
+    * **Implemented** dynamic loading via `readr::read_csv` and `haven::read_sav`.
+    * The runner now accepts real data files, enabling true "Black Box vs White Box" equivalence checks.
+
+### Verification
+* **Unit Tests:** All pass (Refactored to test public API).
+* **Integration Tests:** `test_end_to_end.py` and `test_graph_handoff.py` passed.
+* **Manual Verification:** Successfully ran `statify.py` on `simple_spss`, confirming graph rendering, AI spec generation, R code generation, and successful equivalence verification.

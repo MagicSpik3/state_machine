@@ -11,9 +11,9 @@ class SourceInspector:
         self.lexer = SpssLexer()
         self.parser = SpssParser()
         
-        # FIX: Added '?' after slash to make it optional.
-        # Matches: /FILE='...' OR FILE='...'
-        self._ARG_PATTERN = re.compile(r"/?(?:FILE|OUTFILE)\s*=\s*['\"](.*?)['\"]", re.IGNORECASE)
+        # 🟢 FIX: Added 'TABLE' to capture MATCH FILES dependencies
+        # Matches: /FILE='...' OR /OUTFILE='...' OR /TABLE='...'
+        self._ARG_PATTERN = re.compile(r"/?(?:FILE|OUTFILE|TABLE)\s*=\s*['\"](.*?)['\"]", re.IGNORECASE)
 
     def scan(self, code: str) -> Tuple[List[str], List[str]]:
         inputs = []
@@ -24,18 +24,18 @@ class SourceInspector:
         for raw_cmd in commands:
             parsed = self.parser.parse_command(raw_cmd)
             
+            # FILE_READ (GET DATA) and FILE_MATCH (MATCH FILES) are both Inputs
             if parsed.type == TokenType.FILE_READ or parsed.type == TokenType.FILE_MATCH:
-                found = self._extract_filename(parsed.raw)
-                if found: inputs.append(found)
+                found = self._extract_filenames(parsed.raw)
+                inputs.extend(found)
                 
-            elif parsed.type == TokenType.FILE_SAVE:
-                found = self._extract_filename(parsed.raw)
-                if found: outputs.append(found)
+            elif parsed.type == TokenType.FILE_SAVE or parsed.type == TokenType.AGGREGATE:
+                found = self._extract_filenames(parsed.raw)
+                outputs.extend(found)
                 
         return sorted(list(set(inputs))), sorted(list(set(outputs)))
 
-    def _extract_filename(self, command_text: str) -> str:
+    def _extract_filenames(self, command_text: str) -> List[str]:
+        # Returns a list because one command (MATCH FILES) might reference multiple files
         matches = self._ARG_PATTERN.findall(command_text)
-        if matches:
-            return matches[0]
-        return None
+        return matches if matches else []
