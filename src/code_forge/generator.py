@@ -1,7 +1,8 @@
+#src/code_forge/generator.py
 import logging
 import re
 from typing import List, Optional
-from spss_engine.state import StateMachine, VariableVersion
+from spss_engine.state import StateMachine, VariableVersion, InputSchema
 from spss_engine.events import FileReadEvent, SemanticEvent
 
 logger = logging.getLogger("RGenerator")
@@ -11,7 +12,6 @@ class RGenerator:
         self.state = state_machine
         self.script_lines: List[str] = []
 
-    # 🟢 CHANGED: Accept 'lookups' explicitly. No internal discovery.
     def generate_script(self, lookups: List[str] = None) -> str:
         self.script_lines = []
         self._add_header()
@@ -23,13 +23,9 @@ class RGenerator:
         # Clean Lookup List
         lookup_args = []
         if lookups:
-            # Convert filenames (lookup.sav) to arg names (lookup)
-            # Filter out the main input file if it accidentally got passed here
             for f in lookups:
                 arg = f.split('.')[0]
                 lookup_args.append(arg)
-        
-        # Sort for deterministic output
         lookup_args = sorted(list(set(lookup_args)))
 
         # Generate Function Signature
@@ -41,10 +37,20 @@ class RGenerator:
         
         sig_args = ["df"] + [f"{arg} = NULL" for arg in lookup_args]
         self.script_lines.append(f"logic_pipeline <- function({', '.join(sig_args)}) {{")
+        
+        # 🟢 NEW: Type Enforcement based on Schema (Contract Fulfillment)
+        if self.state.inputs:
+            self.script_lines.append("  # --- Schema Type Enforcement ---")
+            for schema in self.state.inputs:
+                # We assume the main dataframe 'df' matches the first registered schema
+                # or generically apply to 'df' if names match
+                self._generate_type_enforcement(schema, "df")
+            self.script_lines.append("  # -------------------------------")
+
         self.script_lines.append("  df <- df %>%") 
         
         # Generate Body
-        active_nodes = self.state.nodes
+        active_nodes = list(self.state.nodes) if self.state else [] # Safety copy
         for i, node in enumerate(active_nodes):
             r_code = self._transpile_node(node)
             if r_code:
@@ -58,24 +64,70 @@ class RGenerator:
         
         return "\n".join(self.script_lines)
 
-    # ... inside RGenerator class ...
+    def _generate_type_enforcement(self, schema: InputSchema, df_name: str):
+        """
+        Generates R code to cast columns to their schema-defined types.
+        """
+        for col in schema.columns:
+            r_col = f"{df_name}${col.name}"
+            if col.type_generic == "Numeric":
+                self.script_lines.append(f"  {r_col} <- as.numeric({r_col})")
+            elif col.type_generic == "String":
+                self.script_lines.append(f"  {r_col} <- as.character({r_col})")
+            elif col.type_generic == "Date":
+                # Default SPSS format assumption, can be refined later
+                self.script_lines.append(f"  {r_col} <- as.Date({r_col}, format='%d-%b-%Y')")
 
     def generate_loader_snippet(self, event: FileReadEvent) -> str:
         """
         Public method to generate just the data loading block.
         Used by RRunner to ensure test execution matches production logic.
         """
-        # Temporarily hijack self.script_lines to capture just this block
+        # 🟢 CHANGED: Try to find the Schema first
+        found_schema = None
+        if self.state.inputs:
+            for s in self.state.inputs:
+                if s.filename == event.filename:
+                    found_schema = s
+                    break
+        
+        # Temporarily hijack self.script_lines
         original_lines = self.script_lines
         self.script_lines = []
         
-        self._generate_loader_block(event)
+        if found_schema:
+            self._generate_loader_from_schema(found_schema)
+        else:
+            # Fallback to event-based (Legacy)
+            self._generate_loader_block(event)
         
         snippet = "\n".join(self.script_lines)
-        
-        # Restore state
         self.script_lines = original_lines
         return snippet
+
+
+# ... inside RGenerator class ...
+
+    def _generate_loader_from_schema(self, schema: InputSchema):
+        """Generates read code from the Schema object."""
+        var_name = "df"
+        if schema.format == "SAV":
+            self.script_lines.append(f"{var_name} <- read_sav('{schema.filename}')")
+        else:
+            safe_delim = schema.delimiter.replace('"', '\\"') if schema.delimiter else ","
+            self.script_lines.append(f"{var_name} <- read.csv(")
+            self.script_lines.append(f"  file = '{schema.filename}',")
+            self.script_lines.append(f"  sep = '{safe_delim}',")
+            self.script_lines.append(f"  stringsAsFactors = FALSE")
+            self.script_lines.append(f")")
+            
+        # 🟢 FIX: Call the type enforcement logic here too!
+        # This ensures the RRunner (and tests) get the types, not just the main script.
+        if schema.columns:
+            self.script_lines.append("")
+            self.script_lines.append("# Enforce Schema Types")
+            self._generate_type_enforcement(schema, var_name)
+
 
 
 
@@ -99,13 +151,26 @@ class RGenerator:
                 value_true = match.group(3).lower()
                 return f"mutate({target} = if_else({condition}, {value_true}, {target}))"
 
+        # 🟢 RESTORED JOIN LOGIC
         elif "MATCH FILES" in expr.upper():
-             return f"# Join logic detected: {expr}"
+             # MATCH FILES /TABLE='lookup.sav' /BY id.
+             # Naive extraction for Left Join
+             table_match = re.search(r"/TABLE\s*=\s*['\"](.*?)['\"]", expr, re.IGNORECASE)
+             by_match = re.search(r"/BY\s+(\w+)", expr, re.IGNORECASE)
+             
+             if table_match and by_match:
+                 table_file = table_match.group(1)
+                 # Assumption: Argument name matches filename base (lookup.sav -> lookup)
+                 table_arg = table_file.split('.')[0]
+                 key = by_match.group(1).lower()
+                 return f"left_join({table_arg}, by='{key}')"
+             
+             return f"# Complex Join detected: {expr}"
         
         return f"# Unhandled logic: {expr}"
 
-    # ... (Rest of file: generate_standalone_script, etc. remains unchanged) ...
     def generate_standalone_script(self, events: List[SemanticEvent]) -> str:
+        # Legacy support
         self.script_lines = []
         self.script_lines.append("library(dplyr)")
         self.script_lines.append("library(readr)")
@@ -116,6 +181,7 @@ class RGenerator:
         return "\n".join(self.script_lines)
 
     def _generate_loader_block(self, event: FileReadEvent):
+        # Legacy fallback
         raw_delim = event.delimiter if event.delimiter else ","
         raw_qual = event.qualifier if event.qualifier else '"'
         safe_delim = raw_delim.replace('"', '\\"')
@@ -133,18 +199,6 @@ class RGenerator:
         self.script_lines.append(f")")
         self.script_lines.append("")
 
-        if event.variables:
-            self.script_lines.append(f"# SPSS data types identified and transported to R")
-            for var_name, spss_type in event.variables:
-                r_col = f"df${var_name}"
-                if spss_type.startswith("F") or spss_type.startswith("COMMA") or spss_type.startswith("DOLLAR"):
-                    self.script_lines.append(f"{r_col} <- as.numeric({r_col})      # {spss_type}")
-                elif spss_type.startswith("A"):
-                    self.script_lines.append(f"{r_col} <- as.character({r_col})    # {spss_type}")
-                elif "DATE" in spss_type:
-                    self.script_lines.append(f"{r_col} <- as.Date({r_col}, format='%d-%b-%Y') # {spss_type}")
-            self.script_lines.append("")
-        
     def generate_description(self, pkg_name: str) -> str:
         return f"""Package: {pkg_name}
 Title: Converted SPSS Logic

@@ -1,5 +1,24 @@
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Set, Optional, Tuple
 from dataclasses import dataclass, field
+
+# 🟢 NEW: Generic Data Contract Classes
+@dataclass
+class ColumnSchema:
+    name: str
+    type_generic: str  # "Numeric", "String", "Date"
+    type_specific: str # "F8.0", "A10"
+
+@dataclass
+class InputSchema:
+    filename: str
+    format: str        # "CSV", "SAV"
+    columns: List[ColumnSchema]
+    delimiter: Optional[str] = None
+    
+    def describe(self) -> str:
+        return f"Dataset '{self.filename}' ({self.format}) with {len(self.columns)} columns."
+
+# --- Existing Core Structures ---
 
 @dataclass
 class VariableVersion:
@@ -13,7 +32,6 @@ class VariableVersion:
     def id(self):
         return f"{self.name}_{self.version}"
 
-    # 🟢 ADD THIS METHOD
     def __str__(self):
         return self.id
 
@@ -33,6 +51,9 @@ class StateMachine:
         
         self.clusters: List[ClusterMetadata] = [ClusterMetadata(index=0)]
         self.current_cluster_index = 0
+        
+        # 🟢 NEW: Registry of Data Contracts (Additive)
+        self.inputs: List[InputSchema] = []
 
     def get_history(self, var_name: str) -> List[VariableVersion]:
         return self.history_ledger.get(var_name.upper(), [])
@@ -65,6 +86,27 @@ class StateMachine:
         self.nodes.append(new_node)
         self._get_current_cluster().node_count += 1
         return new_node
+
+    # 🟢 NEW: The Schema Registration Method
+    def register_input(self, filename: str, fmt: str, delimiter: str, raw_vars: List[Tuple[str, str]]):
+        """
+        Registers a data contract (Schema) AND updates the graph cluster inputs.
+        """
+        # 1. Build the Schema Object
+        cols = []
+        for name, raw_type in raw_vars:
+            # Map SPSS types to Generic types
+            generic = "String" if raw_type.startswith("A") else "Numeric"
+            if "DATE" in raw_type: generic = "Date"
+            
+            cols.append(ColumnSchema(name=name, type_generic=generic, type_specific=raw_type))
+            
+        schema = InputSchema(filename=filename, format=fmt, delimiter=delimiter, columns=cols)
+        self.inputs.append(schema)
+        
+        # 2. Maintain Backward Compatibility (Graphing)
+        # We call the existing method so the visualizer still sees the file
+        self.register_input_file(filename)
 
     def register_conditional(self, command: str):
         self.conditionals.append(command)
