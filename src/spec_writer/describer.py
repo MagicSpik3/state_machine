@@ -1,3 +1,4 @@
+#src/spec_writer/describer.py
 from typing import Dict, List, Optional
 import logging
 from common.llm import OllamaClient
@@ -22,6 +23,29 @@ class SpecGenerator:
         clusters = self.conductor.identify_clusters()
         report_parts = ["# Business Logic Specification", ""]
 
+        # 🟢 NEW: Data Contract Section
+        if self.state_machine.inputs:
+            report_parts.append("## 1. Data Contracts (Inputs)")
+            for schema in self.state_machine.inputs:
+                report_parts.append(f"### 📄 Dataset: `{schema.filename}`")
+                report_parts.append(f"- **Format:** {schema.format}")
+                if schema.delimiter:
+                    report_parts.append(f"- **Delimiter:** `{schema.delimiter}`")
+                
+                if schema.columns:
+                    report_parts.append("\n| Column Name | Generic Type | Original Type |")
+                    report_parts.append("|---|---|---|")
+                    for col in schema.columns:
+                        report_parts.append(f"| **{col.name}** | {col.type_generic} | `{col.type_specific}` |")
+                else:
+                    report_parts.append("\n*Schema inferred at runtime.*")
+                report_parts.append("")
+            report_parts.append("---")
+            report_parts.append("## 2. Logic Analysis")
+        else:
+             report_parts.append("## 1. Logic Analysis")
+
+        # Existing Logic Cluster Generation
         for i, cluster_node_ids in enumerate(clusters):
             if not cluster_node_ids:
                 continue
@@ -41,7 +65,7 @@ class SpecGenerator:
             if not chapter_title or "Generated" in chapter_title: 
                  chapter_title = "Logic Cluster"
 
-            report_parts.append(f"## Chapter {chapter_num}: {chapter_title}")
+            report_parts.append(f"### Cluster {chapter_num}: {chapter_title}")
             
             # 2. Describe Nodes
             sorted_ids = self.conductor._topological_sort(cluster_node_ids)
@@ -58,7 +82,6 @@ class SpecGenerator:
                     description = "Logic description unavailable."
 
                 report_parts.append(f"* **{node.id}**: {description}")
-                # FIX: Add Source Code to output to pass verification tests
                 report_parts.append(f"  > `{node.source.strip()}`")
 
             report_parts.append("")

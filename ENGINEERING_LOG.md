@@ -382,3 +382,25 @@ Following a critical architectural review, we moved away from the "God Object" p
 * **Unit Tests:** All pass (Refactored to test public API).
 * **Integration Tests:** `test_end_to_end.py` and `test_graph_handoff.py` passed.
 * **Manual Verification:** Successfully ran `statify.py` on `simple_spss`, confirming graph rendering, AI spec generation, R code generation, and successful equivalence verification.
+
+
+## [2026-01-10] Architectural Pivot: Schema-First Data Contracts
+
+**Branch:** `feature/schema-contracts` (Proposed)
+**Status:** Design Phase
+
+### The Realization
+We discovered a violation of the "Language Agnostic" philosophy. We were attempting to force the `RRunner` to construct `read.csv` calls by injecting raw snippets or hacking the wrapper generation. This coupled the execution logic too tightly to R specifics and ignored the `State Machine` as the source of truth.
+
+### The Fix
+We are shifting to a **Data Contract** model:
+1.  **Ingestion:** The Parser extracts file metadata (filename, columns, types) during `GET DATA`.
+2.  **State:** The `StateMachine` stores a generic `InputSchema` (e.g., "Field 'age' is Numeric").
+3.  **Generation:** The `RGenerator` (or any future generator) reads this schema to write strict, type-safe loading code.
+4.  **Documentation:** The `SpecGenerator` uses this schema to produce a Data Dictionary.
+
+### Definition of Done
+* `StateMachine` has an `.inputs` registry.
+* `FileReadEvent` triggers `state.register_input()`.
+* `RGenerator` writes `df$col <- as.numeric(...)` based on the registry, not hardcoding.
+* New unit tests verify the schema storage and retrieval.
