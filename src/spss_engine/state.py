@@ -40,7 +40,9 @@ class ClusterMetadata:
     index: int
     inputs: Set[str] = field(default_factory=set)
     outputs: Set[str] = field(default_factory=set)
-    node_count: int = 0 
+    node_count: int = 0
+    description: str = "" # 🟢 Ensure this field exists!
+
 
 class StateMachine:
     def __init__(self):
@@ -121,8 +123,11 @@ class StateMachine:
                 usage_map[dep.id] += 1
         dead_ids = []
         for var_name, history in self.history_ledger.items():
+            # 🟢 Skip system variables (internal use only)
+            if var_name.startswith("###") and var_name.endswith("###"):
+                continue
             for i, ver in enumerate(history):
-                if i == len(history) - 1: continue
+                if i == len(history) - 1: continue  # Skip latest version (always live)
                 if usage_map[ver.id] == 0: dead_ids.append(ver.id)
         return dead_ids
 
@@ -137,7 +142,9 @@ class StateMachine:
         clean_name = filename.strip("'").strip('"').strip()
         if clean_name: self._get_current_cluster().outputs.add(clean_name)
 
-    def reset_scope(self):
+
+
+    def reset_scope(self, reason: str = ""):
         """
         Finalizes the current cluster and starts a new one.
         PREVENTS EMPTY CLUSTERS: If the current cluster is pristine (unused),
@@ -154,8 +161,14 @@ class StateMachine:
         
         if is_pristine:
             # We are at the start of the script (or repeated resets). 
-            # Stay on the current cluster.
+            # Update the description if provided, but don't create a new cluster.
+            if reason:
+                current.description = reason
             return
 
         self.current_cluster_index += 1
-        self.clusters.append(ClusterMetadata(index=self.current_cluster_index))
+        # Create new cluster with the specific reason
+        self.clusters.append(ClusterMetadata(index=self.current_cluster_index, description=reason))
+
+
+
