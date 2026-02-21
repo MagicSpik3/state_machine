@@ -1,0 +1,9 @@
+DATA LIST LIST /dummy.
+BEGIN DATA
+1
+END DATA.
+COMPUTE Gross = 50000.
+COMPUTE Tax_Rate = 0.20.
+COMPUTE Tax = Gross * Tax_Rate.
+COMPUTE Net_Pay = Gross - Tax.
+EXECUTE.

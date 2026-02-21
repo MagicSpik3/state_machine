@@ -8,6 +8,10 @@ from typing import Dict, List, Optional, Set
 
 # --- Analysis Core ---
 
+
+
+
+
 def get_ast_nodes(tree):
     """Extracts flat list of Classes and Functions from AST."""
     nodes = []
@@ -92,6 +96,11 @@ class CodebaseMapper:
             # Code Forge Tools -> TestCodeForgeTools
             "codeoptimizer": ["tests/unit/test_code_forge_tools.py::TestCodeForgeTools"],
             "coderefiner": ["tests/unit/test_code_forge_tools.py::TestCodeForgeTools"],
+           
+            # 🟢 NEW: Schema & Parser Mappings
+            "columnschema": ["tests/unit/test_schema_definitions.py::TestSchemaDefinitions"],
+            "inputschema": ["tests/unit/test_schema_definitions.py::TestSchemaDefinitions"],
+            "dataloaderparser": ["tests/unit/test_data_loader.py::TestDataLoaderParser"],
         }
         
         if name_lower in manual_mappings:

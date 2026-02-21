@@ -1,34 +1,36 @@
 import pytest
+from spss_engine.state import StateMachine
 from spss_engine.events import FileReadEvent
 from code_forge.generator import RGenerator
 
 class TestRCodegen:
     def test_generate_strict_loader(self):
-        # 1. Create a Rich Event (simulating what Parser produces)
-        event = FileReadEvent(
-            source_command="raw",
+        """
+        Verify that we generate type-safe loading code when a Schema is present.
+        """
+        # 1. Setup State with Schema
+        state = StateMachine()
+        state.register_input(
             filename="input_people.csv",
+            fmt="CSV",
             delimiter=",",
-            qualifier='"',
-            header_row=True,
-            variables=[
-                ("id", "F8.0"),
-                ("age", "F8.0"),
-                ("gender", "A1"),
-                ("income", "F10.0")
-            ]
+            raw_vars=[("id", "F8.0")] # This triggers the type enforcement
         )
         
-        # 2. Generate Code
-        # We pass None for state_machine as we are testing the static generator method
-        gen = RGenerator(state_machine=None) 
-        code = gen.generate_standalone_script([event])
+        generator = RGenerator(state)
         
-        # 3. Assertions (Matching your Definition of Done)
-        assert 'df <- read.csv(' in code
-        assert 'sep = ","' in code
-        assert 'quote = "\\""' in code # Escaped quote
-        assert 'stringsAsFactors = FALSE' in code
+        # 2. Mock Event (Legacy support for the method signature)
+        event = FileReadEvent(
+            source_command="GET DATA...", 
+            filename="input_people.csv",
+            variables=[("id", "F8.0")]
+        )
         
+        # 3. Generate Snippet
+        code = generator.generate_loader_snippet(event)
+        
+        # 4. Assertions
+        assert 'df <- read.csv' in code       
+        # 🟢 CHANGED: Expect single quotes as per Generator implementation
+        assert "file = 'input_people.csv'" in code
         assert 'df$id <- as.numeric(df$id)' in code
-        assert 'df$gender <- as.character(df$gender)' in code

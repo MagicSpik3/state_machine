@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple
 
 @dataclass
 class SemanticEvent:
+    """Base class for all semantic events in the pipeline."""
     source_command: str
 
 @dataclass
@@ -12,19 +13,12 @@ class FileReadEvent(SemanticEvent):
     """
     filename: str
     format: str = "TXT" # TXT, SAV, XLS
-    delimiter: str = "," # Default csv
+    delimiter: Optional[str] = "," 
     qualifier: Optional[str] = '"'
     header_row: bool = True
     skip_rows: int = 0
     # List of (variable_name, spss_type_str) e.g., ('age', 'F8.0')
     variables: List[Tuple[str, str]] = field(default_factory=list)
-
-
-@dataclass
-class SemanticEvent:
-    """Base class for all semantic events in the pipeline."""
-    source_command: str
-
 
 @dataclass
 class FileMatchEvent(SemanticEvent):
@@ -42,9 +36,23 @@ class AssignmentEvent(SemanticEvent):
     """Represents variable creation or mutation (COMPUTE, IF, RECODE)."""
     target: str
     dependencies: List[str]
-    expression: str
+    # Note: 'expression' is often synonymous with source_command in simple cases
+    # but strictly it is the RHS of the equation.
+    expression: str = "" 
 
 @dataclass
 class ScopeResetEvent(SemanticEvent):
     """Explicit instruction to wipe memory/start new cluster."""
     reason: str
+
+# 🟢 MISSING EVENTS ADDED BELOW
+
+@dataclass
+class ConditionalEvent(SemanticEvent):
+    """Represents flow control start (DO IF, LOOP)."""
+    condition: str
+
+@dataclass
+class ControlFlowEvent(SemanticEvent):
+    """Represents structural commands (END IF, END LOOP, EXECUTE)."""
+    command_type: str # "END_IF", "EXECUTE", etc.
